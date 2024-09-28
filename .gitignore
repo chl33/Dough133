@@ -1,0 +1,10 @@
+.pio
+/KiCAD/DoughLee2-backups/
+/KiCAD/Gerber/
+*~
+/data/mqtt.json
+/data/wifi.json
+*.3mf
+*.old
+secret*.ini
+/.ccls-cache/
