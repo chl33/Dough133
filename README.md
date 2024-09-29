@@ -15,6 +15,15 @@ Please also see the other entries describing this project:
 - [Dough133](https://selectiveappeal.org/posts/dough133/)
 - [Dough133 Electronics Design](https://selectiveappeal.org/posts/dough133-electronics/)
 
+Components needed for making this device, along with links and approximate price as of September 2024:
+
+| Item | Source  | Approximate cost  |
+|---|---|---|
+| Coleman 16 qt cooler | [Amazon](https://www.amazon.com/gp/product/B09HN13FN4) | $23 |
+| PTC Air Heater 12V 100W | [AliExpress](https://www.aliexpress.us/item/3256803451720173.html) | $7 |
+| DC 12V 5A Power Supply | [Amazon](https://www.amazon.com/gp/product/B01GEA8PQA)  | $12  |
+
+
 ## KiCAD
 
 The circuit board design is in [KiCAD/](KiCAD/).
