@@ -2,7 +2,7 @@
 
 Dough133 is a temperature-controlled container for proofing and fermenting sourdough. It uses a small cooler and a PTC heater with a fan to heat the inside of the cooler. A PCBA with an ESP32 regulates the power supplied to the heater to regulate the temperature of the enclosure.
 
-![Doughh133](cooler-ebox-scaled-1400x1187.webp)
+![Doughh133](images/cooler-ebox-scaled-1400x1187.webp)
 
 This repository is a work in progress.  It contains:
 - KiCAD design for the PCB.
@@ -19,7 +19,7 @@ Please also see the other entries describing this project:
 
 The circuit board design is in [KiCAD/](KiCAD/).
 
-![Circuit board](Dough133-PCB-components-1400x1050.webp)
+![Circuit board](images/Dough133-PCB-components-1400x1050.webp)
 
 
 ## OpenSCAD
@@ -30,11 +30,11 @@ The EBox is based on the [ProjectBox](https://github.com/chl33/ProjectBox) OpenS
 
 The heater mount secures the heater and temperature/humidity sensor inside the cooler.
 
-![Heater mount](heater-holder2-1400x1203.webp)
+![Heater mount](images/heater-holder2-1400x1203.webp)
 
 The Cooler plug helps avoid heat leaking through the hole through which wires run from the heater mount through the wall of the cooler to the EBox.
 
-![Cooler plug](cooler-plug-1400x858.webp)
+![Cooler plug](images/cooler-plug-1400x858.webp)
 
 
 ## Software
