@@ -400,7 +400,7 @@
     </comp>
     <comp ref="U4">
       <value>SN74LVC1G123DCUR</value>
-      <footprint>Library:SOP50P310X90-8N</footprint>
+      <footprint>chl33_library:SOP50P310X90-8N</footprint>
       <fields>
         <field name="MF">Texas Instruments</field>
         <field name="Package">VSSOP-8 Texas Instruments</field>
@@ -415,7 +415,7 @@
     </comp>
     <comp ref="U5">
       <value>74LVC1G08</value>
-      <footprint>Library:SOT-23-5</footprint>
+      <footprint>chl33_library:SOT-23-5</footprint>
       <datasheet>https://www.ti.com/lit/ds/symlink/sn74lvc1g08.pdf</datasheet>
       <libsource lib="74xGxx" part="74LVC1G08" description="Single AND Gate, Low-Voltage CMOS"/>
       <property name="Sheetname" value=""/>
@@ -482,7 +482,7 @@
     </comp>
     <comp ref="J3">
       <value>Edge2x6_Connector</value>
-      <footprint>Library:EdgeConnector_2x3</footprint>
+      <footprint>chl33_library:EdgeConnector_2x3</footprint>
       <libsource lib="chl33" part="Edge2x6_Connector" description=""/>
       <property name="Sheetname" value="ESP32-NoSerial"/>
       <property name="Sheetfile" value="ESP32-NoSerial.kicad_sch"/>
@@ -614,7 +614,7 @@
     </comp>
     <comp ref="L1">
       <value>100 μH </value>
-      <footprint>Library:CD54</footprint>
+      <footprint>chl33_library:CD54</footprint>
       <libsource lib="Device" part="L" description="Inductor"/>
       <property name="Sheetname" value="5vBuck"/>
       <property name="Sheetfile" value="buck5v.kicad_sch"/>
@@ -1057,7 +1057,7 @@
       <fields>
         <field name="Reference">U</field>
         <field name="Value">SN74LVC1G123DCUR</field>
-        <field name="Footprint">Library:SOP50P310X90-8N</field>
+        <field name="Footprint">chl33_library:SOP50P310X90-8N</field>
         <field name="MF">Texas Instruments</field>
         <field name="Package">VSSOP-8 Texas Instruments</field>
       </fields>
