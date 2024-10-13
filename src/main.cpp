@@ -639,9 +639,9 @@ void handleConfigure(AsyncWebServerRequest* request) {
 }  // namespace og3
 
 void setup() {
+  Wire1.setPins(og3::kSda2, og3::kScl2);  // The room temp sensor uses this second i2c bus.
   og3::s_app.web_server().on("/", og3::handleWebRoot);
 
-  Wire1.begin(og3::kSda2, og3::kScl2);  // The room temp sensor uses this second i2c bus.
   og3::s_oled.setup();
   og3::s_oled.addDisplayFn([]() {
     og3::s_oled.setFontSize(og3::Oled::kSixteenPt);

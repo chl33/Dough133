@@ -30,6 +30,8 @@ The circuit board design is in [KiCAD/](KiCAD/).
 
 ![Circuit board](images/Dough133-PCB-components-1400x1050.webp)
 
+These require footprints in [`chl33_library`](https://github.com/chl33/chl33_library.pretty) and symbols in [`chl33_kicad_sym`](https://github.com/chl33/chl33_kicad_sym).
+
 
 ## OpenSCAD
 
