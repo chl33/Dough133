@@ -25,7 +25,7 @@
 #include <functional>
 #include <limits>
 
-#define VERSION "0.9.7"
+#define VERSION "0.9.8"
 
 // TODO(chrishl):
 //  - Get board temperature working.
@@ -53,6 +53,7 @@ constexpr double kHeaterPwmFrequency = 100;  // Pwm::kAnalogWriteFreqMin;  // 10
 constexpr double kSafetyPwmFrequency = 200;
 // Time to turn on relay from web button press.
 constexpr int kFanOnMsec = 60 * kMsecInSec;
+constexpr int kHeaterOnMsec = 10 * kMsecInSec;
 
 constexpr float kDefaultTargetTemp = 27.0f;
 constexpr float kDefaultMinValidTemp = 10.0f;
@@ -196,6 +197,7 @@ class TempControl : public Module {
     kStateEnabled,   // heater control is enabled
     kStateCooldown,  // run fan after heating to cooldown
     kStateError,     // a problem was detected.
+    kStateSystemId,  // system id test
   };
 
   static const char* state_names[];
@@ -223,6 +225,7 @@ class TempControl : public Module {
         return this->haDiscovery(had, json);
       });
     });  // end of init-fn
+    add_start_fn([this]() { sameState(10 * kMsecInSec); });
   }
 
   void setFeedForward() {
@@ -238,6 +241,8 @@ class TempControl : public Module {
 
   bool enabled() const { return m_state.value() == kStateEnabled; }
 
+  void testSystemId() { setState(kStateSystemId, 100); }
+
   void setEnable() {
     // Enable control from current state.
     switch (m_state.value()) {
@@ -246,6 +251,7 @@ class TempControl : public Module {
       case kStateDisabled:
       case kStateCooldown:
       case kStateError:
+      case kStateSystemId:
         // Make sure feedforward temperature will be recomputed if control is re-enabled.
         m_initial_temp = kUninitializedTemp;
         s_pid.feedforward() = 0.0f;
@@ -258,6 +264,7 @@ class TempControl : public Module {
     // Disable control from current state.
     switch (m_state.value()) {
       case kStateEnabled:
+      case kStateSystemId:
         setState(kStateCooldown, 100);
         break;
       case kStateDisabled:
@@ -378,6 +385,22 @@ class TempControl : public Module {
         heaterOn(cmd);
         turnFanOn();
         sameState(kUpdateOnMsec);
+        break;
+      }
+      case kStateSystemId: {
+        constexpr unsigned kHeatMsec = 60 * kMsecInSec;
+        constexpr unsigned kFanMsec = 2 * kHeatMsec;
+
+        if (msecInState() < kHeatMsec) {
+          heaterOn(1.0);  // turn on for 1000msec
+          turnFanOn();
+          sameState(kUpdateOnMsec);
+        } else if (msecInState() < kFanMsec) {
+          heaterOff();  // turn on for 1000msec
+          sameState(kUpdateOnMsec);
+        } else {
+          setState(kStateDisabled, kUpdateOffMsec);
+        }
         break;
       }
     }
@@ -514,10 +537,7 @@ class TempControl : public Module {
 };
 
 const char* TempControl::state_names[] = {
-    "Off",
-    "Running",
-    "Cooling...",
-    "Error!",
+    "Off", "Running", "Cooling...", "Error!", "SystemID Test",
 };
 
 TempControl s_temp_control;
@@ -548,8 +568,13 @@ void handleHeaterRelay(AsyncWebServerRequest* request) {
   // static Ticker s_heater_off_ticker;
   heaterOn(0.2);  // turn on for 1000msec
   s_blink.blink(3);
-  s_app.log().logf("turning on heater for %u msec.", 1000);
-  s_app.tasks().runIn(10000, []() { heaterOff(); });
+  s_app.log().logf("turning on heater for %u msec.", kHeaterOnMsec);
+  s_app.tasks().runIn(kHeaterOnMsec, []() { heaterOff(); });
+  request->redirect(s_config_url);
+}
+
+void handleSystemIdCheck(AsyncWebServerRequest* request) {
+  s_temp_control.testSystemId();
   request->redirect(s_config_url);
 }
 
@@ -599,6 +624,9 @@ og3::WebButton s_button_test_fan(&s_app.web_server(), "Test fan", "/relay/fan", 
 og3::WebButton s_button_test_heater(&s_app.web_server(), "Test heater", "/relay/heater",
                                     handleHeaterRelay);
 
+og3::WebButton s_button_test_sysid(&s_app.web_server(), "Do system id", "/systemid",
+                                   handleSystemIdCheck);
+
 void handleWebRoot(AsyncWebServerRequest* request) {
   s_html.clear();
   s_temp_control.writeHtmlStatusTable(&s_html);
@@ -632,6 +660,7 @@ void handleConfigure(AsyncWebServerRequest* request) {
   s_button_doughl33_config.add_button(&s_html);
   s_button_test_fan.add_button(&s_html);
   s_button_test_heater.add_button(&s_html);
+  s_button_test_sysid.add_button(&s_html);
   s_html += HTML_BUTTON("/", "Back");
   sendWrappedHTML(request, s_app.board_cname(), kSoftware, s_html.c_str());
 }
