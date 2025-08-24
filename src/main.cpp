@@ -206,7 +206,7 @@ class TempControl : public Module {
   TempControl()
       : Module("temp_ctl", &s_app.module_system()),
         m_scheduler(&s_app.tasks()),
-        m_state("state", kStateDisabled, "", "heater state", kNoFlag, s_vg),
+        m_state("state", kStateDisabled, "heater state", kStateError, state_names, kNoFlag, s_vg),
         m_temp_min_ok("temp_min_ok", kDefaultMinValidTemp, units::kCelsius, "Min valid temperature",
                       kCfgFlag, 1, s_cvg),
         m_temp_max_ok("temp_max_ok", kDefaultMaxValidTemp, units::kCelsius, "Max valid temperature",
@@ -220,6 +220,9 @@ class TempControl : public Module {
       auto* had = &s_app.ha_discovery();
       had->addDiscoveryCallback([this](HADiscovery* had, JsonDocument* json) -> bool {
         return this->haDiscovery(had, json);
+      });
+      had->addDiscoveryCallback([this](HADiscovery* had, JsonDocument* json) {
+        return had->addEnum(json, m_state, ha::device_type::kSensor, nullptr);
       });
     });  // end of init-fn
   }
@@ -387,7 +390,7 @@ class TempControl : public Module {
     s_app.mqttSend(s_cmdvg, VariableBase::kConfig);
   }
 
-  void writeHtmlStatusTable(String* out) {
+  void writeHtmlStatusTable(std::string* out) {
     html::writeTableStart(out, "Status");
     html::writeRowInto(out, s_pid.target());
     html::writeRowInto(out, m_heat_mode);
@@ -456,8 +459,14 @@ class TempControl : public Module {
   }
   bool haDiscovery(HADiscovery* had, JsonDocument* json) {
     json->clear();
-    String name = "thermostat";
-    had->addRoot(json, nullptr);
+
+    {
+      // The variable is not used for addRoot() -- this just sets device informaton.
+      HADiscovery::Entry entry(m_temp_min_ok, ha::device_type::kClimate, nullptr);
+      had->addRoot(json, entry);
+    }
+
+    std::string name = "thermostat";
     auto& js = *json;
     js["name"] = name;
     js["mode_cmd_t"] = "~/mode/set";
@@ -499,7 +508,7 @@ class TempControl : public Module {
 
  private:
   TaskIdScheduler m_scheduler;
-  EnumVariable<State> m_state;
+  EnumStrVariable<State> m_state;
   float m_initial_temp = kUninitializedTemp;
   float m_last_temp = 0.0f;
   unsigned long m_last_msec = 0;
@@ -508,8 +517,8 @@ class TempControl : public Module {
   FloatVariable m_temp_min_ok;
   FloatVariable m_temp_max_ok;
   FloatVariable m_ctl_ff_per_delta_c;
-  Variable<String> m_heat_mode;  // heater mode for HA thermostat ('off' / 'on').
-  Variable<String> m_fan_mode;   // fan mode for HA thermostat ('off' / 'high').
+  Variable<std::string> m_heat_mode;  // heater mode for HA thermostat ('off' / 'on').
+  Variable<std::string> m_fan_mode;   // fan mode for HA thermostat ('off' / 'high').
 };
 
 const char* TempControl::state_names[] = {
@@ -555,7 +564,7 @@ void handleHeaterRelay(AsyncWebServerRequest* request) {
 // The send of the web page happens asynchronously, so we need to make
 //  sure the storage for the page remains after they are rendered to html.
 // That is why html is stored in this static variable.
-static String s_html;
+static std::string s_html;
 
 void handleUpdateTarget(AsyncWebServerRequest* request) {
 #ifndef NATIVE
