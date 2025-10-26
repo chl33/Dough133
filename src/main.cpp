@@ -24,7 +24,7 @@
 #include <functional>
 #include <limits>
 
-#define VERSION "0.9.7"
+#define VERSION "0.9.9"
 
 // TODO(chrishl):
 //  - Get board temperature working.
@@ -390,7 +390,7 @@ class TempControl : public Module {
     s_app.mqttSend(s_cmdvg, VariableBase::kConfig);
   }
 
-  void writeHtmlStatusTable(std::string* out) {
+  void writeHtmlStatusTable(String* out) {
     html::writeTableStart(out, "Status");
     html::writeRowInto(out, s_pid.target());
     html::writeRowInto(out, m_heat_mode);
@@ -466,7 +466,7 @@ class TempControl : public Module {
       had->addRoot(json, entry);
     }
 
-    std::string name = "thermostat";
+    String name = "thermostat";
     auto& js = *json;
     js["name"] = name;
     js["mode_cmd_t"] = "~/mode/set";
@@ -517,8 +517,8 @@ class TempControl : public Module {
   FloatVariable m_temp_min_ok;
   FloatVariable m_temp_max_ok;
   FloatVariable m_ctl_ff_per_delta_c;
-  Variable<std::string> m_heat_mode;  // heater mode for HA thermostat ('off' / 'on').
-  Variable<std::string> m_fan_mode;   // fan mode for HA thermostat ('off' / 'high').
+  Variable<String> m_heat_mode;  // heater mode for HA thermostat ('off' / 'on').
+  Variable<String> m_fan_mode;   // fan mode for HA thermostat ('off' / 'high').
 };
 
 const char* TempControl::state_names[] = {
@@ -564,7 +564,7 @@ void handleHeaterRelay(AsyncWebServerRequest* request) {
 // The send of the web page happens asynchronously, so we need to make
 //  sure the storage for the page remains after they are rendered to html.
 // That is why html is stored in this static variable.
-static std::string s_html;
+static String s_html;
 
 void handleUpdateTarget(AsyncWebServerRequest* request) {
 #ifndef NATIVE
