@@ -253,8 +253,10 @@ class TempControl : public Module {
         // Start ramping from current temperature
         if (s_shtc3_enclosure.read()) {
           s_pid.target() = s_shtc3_enclosure.temperature();
+          s_pid.d_target() = 0.0f;
         } else {
           s_pid.target() = m_set_temp.value();
+          s_pid.d_target() = 0.0f;
         }
         setState(kStateEnabled, 100);
         break;
@@ -331,62 +333,65 @@ class TempControl : public Module {
     if (!s_shtc3_room.read()) {
       s_app.log().logf("Failed to read SHTC3 room sensor");
     }
-    const float temp = s_shtc3_enclosure.temperature();
     const long now_msec = millis();
+    const float temp = s_shtc3_enclosure.temperature();
+    const bool temp_ok = temp >= m_temp_min_ok.value() && temp <= m_temp_max_ok.value();
     const float now_sec = now_msec * 1e-3;
 
-    if (m_initial_temp == kUninitializedTemp) {
+    if (!temp_ok) {
+      s_app.log().logf("Temperature %.1f outside valid range %.1f-%.1f", temp,
+                       m_temp_min_ok.value(), m_temp_min_ok.value());
+      setState(kStateError, 10 * kMsecInSec);
+    }
+
+    // Store the enclosur temperature when control is first enabled.
+    if (m_state.value() == kStateEnabled && m_initial_temp == kUninitializedTemp) {
       m_initial_temp = temp;
     }
+
+    // Return a target d_temp of -ramp_rate or ramp_rate, unless within a degree of them
+    //  target, in which case scale ramp linearly to zero when error is zero.
+    auto compute_target_d_temp = [this](float goal, float current_target) {
+      const float error = goal - current_target;
+      const float scale = (error > 1.0    ? 1.0      // increase at full-ramp rate.
+                           : error < -1.0 ? -1.0     // decrease at full-ramp rate.
+                                          : error);  // increase/decrease scaled by error.
+      return scale * m_ramp_rate.value();
+    };
 
     // Ramping and Feedforward Logic
     if (m_state.value() == kStateEnabled && m_last_msec > 0) {
       const float dt = (now_msec - m_last_msec) * 1.0e-3;
       if (dt > 0.0f && dt < 2.0f) {  // Sanity check on dt
         const float current_target = s_pid.target().value();
-        const float goal = m_set_temp.value();
-        const float step = m_ramp_rate.value() * dt;
-
-        float next_target = current_target;
-        if (std::abs(goal - current_target) <= step) {
-          next_target = goal;
-        } else if (goal > current_target) {
-          next_target = current_target + step;
-        } else {
-          next_target = current_target - step;
-        }
+        const float target_d_temp = compute_target_d_temp(m_set_temp.value(), current_target);
+        const float next_target = current_target + target_d_temp * dt;
         s_pid.target() = next_target;
+        s_pid.d_target() = target_d_temp;
 
         // Calculate Feedforward
         // 1. Dynamic FF: Power required to change temperature (Heat Capacity)
-        const float ramp_rate = (next_target - current_target) / dt;
-        const float dynamic_ff = ramp_rate * m_ff_per_rate.value();
+        const float dynamic_ff = target_d_temp * m_ff_per_rate.value();
 
         // 2. Static FF: Power required to maintain delta T (Insulation Loss)
-        float static_ff = 0.0f;
-        if (m_initial_temp != kUninitializedTemp) {
-          static_ff = (next_target - m_initial_temp) * m_ctl_ff_per_delta_c.value();
-        }
+        const float static_ff = (next_target - m_initial_temp) * m_ctl_ff_per_delta_c.value();
+
         s_pid.feedforward() = static_ff + dynamic_ff;
       }
     }
 
     // Track filtered temperature and temperature derivatives.
-    s_temp_filter.addSample(now_sec, temp);
-    float filt_d_temp = 0.0f;
-    if (m_last_temp != 0.0f) {
-      const float delta_temp = temp - m_last_temp;
-      const float delta_time = (now_msec - m_last_msec) * 1.0e-3;
-      const float dtemp = delta_temp / delta_time;
-      filt_d_temp = s_d_temp_filter.addSample(now_sec, dtemp);
-    }
-    m_last_temp = temp;
-    m_last_msec = now_msec;
-
-    if (temp < m_temp_min_ok.value() || temp > m_temp_max_ok.value()) {
-      s_app.log().logf("Temperature %.1f outside valid range %.1f-%.1f", temp,
-                       m_temp_min_ok.value(), m_temp_min_ok.value());
-      setState(kStateError, 10 * kMsecInSec);
+    if (temp_ok) {
+      s_temp_filter.addSample(now_sec, temp);
+      float filt_d_temp = 0.0f;
+      if (m_last_temp != 0.0f) {
+        const float delta_temp = temp - m_last_temp;
+        const float delta_time = (now_msec - m_last_msec) * 1.0e-3;
+        const float dtemp = delta_temp / delta_time;
+        filt_d_temp = s_d_temp_filter.addSample(now_sec, dtemp);
+      }
+      m_last_temp = temp;
+      m_last_msec = now_msec;
     }
 
     switch (m_state.value()) {
