@@ -20,11 +20,12 @@
 #include <og3/web.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <functional>
 #include <limits>
 
-#define VERSION "0.9.9"
+#define VERSION "0.9.95"
 
 // TODO(chrishl):
 //  - Get board temperature working.
@@ -62,6 +63,8 @@ constexpr float kDefaultCtlD = 5.0f;
 constexpr float kDefaultCtlIMin = -0.15f;
 constexpr float kDefaultCtlIMax = 0.15f;
 constexpr float kDefaultCtlFFPerDeltaC = 0.01f;
+constexpr float kDefaultRampRate = 0.05f;  // °C/sec
+constexpr float kDefaultFFPerRate = 0.0f;  // pwm / (°C/sec)
 constexpr float kTargetTempMax = 35.0f;
 constexpr float kTargetTempMin = 15.0f;
 
@@ -213,6 +216,11 @@ class TempControl : public Module {
                       kCfgFlag, 1, s_cvg),
         m_ctl_ff_per_delta_c("ctl_ff_per_delta_c", kDefaultCtlFFPerDeltaC, "pwm/deltaC",
                              "FF per deltaC", kCfgFlag, 3, s_cvg),
+        m_set_temp("set_temp", kDefaultTargetTemp, units::kCelsius, "Target Temperature", kCfgFlag,
+                   1, s_cmdvg),
+        m_ramp_rate("ramp_rate", kDefaultRampRate, "°C/s", "Ramp Rate", kCfgFlag, 3, s_cvg),
+        m_ff_per_rate("ff_per_rate", kDefaultFFPerRate, "pwm/(°C/s)", "FF per Rate", kCfgFlag, 3,
+                      s_cvg),
         m_heat_mode(kHtrMode, kOff, "", "heater mode", kNoFlag, s_vg),
         m_fan_mode(kFanMode, kOff, "", "fan mode", kNoFlag, s_vg) {
     add_init_fn([this]() {
@@ -227,16 +235,7 @@ class TempControl : public Module {
     });  // end of init-fn
   }
 
-  void setFeedForward() {
-    if (initialTemp() > 0.0f) {
-      s_pid.feedforward() = (s_pid.target().value() - initialTemp()) * m_ctl_ff_per_delta_c.value();
-    }
-  }
-
-  void setTargetTemp(float target) {
-    s_pid.target() = target;
-    setFeedForward();
-  }
+  void setTargetTemp(float target) { m_set_temp = target; }
 
   bool enabled() const { return m_state.value() == kStateEnabled; }
 
@@ -251,6 +250,12 @@ class TempControl : public Module {
         // Make sure feedforward temperature will be recomputed if control is re-enabled.
         m_initial_temp = kUninitializedTemp;
         s_pid.feedforward() = 0.0f;
+        // Start ramping from current temperature
+        if (s_shtc3_enclosure.read()) {
+          s_pid.target() = s_shtc3_enclosure.temperature();
+        } else {
+          s_pid.target() = m_set_temp.value();
+        }
         setState(kStateEnabled, 100);
         break;
     }
@@ -332,7 +337,38 @@ class TempControl : public Module {
 
     if (m_initial_temp == kUninitializedTemp) {
       m_initial_temp = temp;
-      setFeedForward();
+    }
+
+    // Ramping and Feedforward Logic
+    if (m_state.value() == kStateEnabled && m_last_msec > 0) {
+      const float dt = (now_msec - m_last_msec) * 1.0e-3;
+      if (dt > 0.0f && dt < 2.0f) {  // Sanity check on dt
+        const float current_target = s_pid.target().value();
+        const float goal = m_set_temp.value();
+        const float step = m_ramp_rate.value() * dt;
+
+        float next_target = current_target;
+        if (std::abs(goal - current_target) <= step) {
+          next_target = goal;
+        } else if (goal > current_target) {
+          next_target = current_target + step;
+        } else {
+          next_target = current_target - step;
+        }
+        s_pid.target() = next_target;
+
+        // Calculate Feedforward
+        // 1. Dynamic FF: Power required to change temperature (Heat Capacity)
+        const float ramp_rate = (next_target - current_target) / dt;
+        const float dynamic_ff = ramp_rate * m_ff_per_rate.value();
+
+        // 2. Static FF: Power required to maintain delta T (Insulation Loss)
+        float static_ff = 0.0f;
+        if (m_initial_temp != kUninitializedTemp) {
+          static_ff = (next_target - m_initial_temp) * m_ctl_ff_per_delta_c.value();
+        }
+        s_pid.feedforward() = static_ff + dynamic_ff;
+      }
     }
 
     // Track filtered temperature and temperature derivatives.
@@ -472,9 +508,9 @@ class TempControl : public Module {
     js["mode_cmd_t"] = "~/mode/set";
     js["mode_stat_t"] = "~/dough";
     js["mode_stat_tpl"] = "{{value_json.htr_mode}}";  // Set state to "off", "heat";
-    js["temp_cmd_t"] = "~/target/set";
+    js["temp_cmd_t"] = "~/set_temp/set";
     js["temp_stat_t"] = "~/dough_cmd";
-    js["temp_stat_tpl"] = "{{value_json.target}}";
+    js["temp_stat_tpl"] = "{{value_json.set_temp}}";
     js["temperature_unit"] = "C";
     js["fan_mode_cmd_t"] = "~/fan_mode/set";
     js["fan_mode_stat_t"] = "~/dough";
@@ -499,7 +535,7 @@ class TempControl : public Module {
     had->mqttSubscribe("fan_mode/set", [this](const char* topic, const char* payload, size_t len) {
       this->mqttSetFanMode(topic, payload, len);
     });
-    had->mqttSubscribe("target/set", [this](const char* topic, const char* payload, size_t len) {
+    had->mqttSubscribe("set_temp/set", [this](const char* topic, const char* payload, size_t len) {
       this->mqttSetTargetTemp(topic, payload, len);
     });
 
@@ -517,6 +553,9 @@ class TempControl : public Module {
   FloatVariable m_temp_min_ok;
   FloatVariable m_temp_max_ok;
   FloatVariable m_ctl_ff_per_delta_c;
+  FloatVariable m_set_temp;
+  FloatVariable m_ramp_rate;
+  FloatVariable m_ff_per_rate;
   Variable<String> m_heat_mode;  // heater mode for HA thermostat ('off' / 'on').
   Variable<String> m_fan_mode;   // fan mode for HA thermostat ('off' / 'high').
 };
