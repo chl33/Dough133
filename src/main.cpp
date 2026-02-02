@@ -365,9 +365,11 @@ class TempControl : public Module {
       if (dt > 0.0f && dt < 2.0f) {  // Sanity check on dt
         const float current_target = s_pid.target().value();
         const float target_d_temp = compute_target_d_temp(m_set_temp.value(), current_target);
-        const float next_target = current_target + target_d_temp * dt;
+        const float delta_target = target_d_temp * dt;
+        const bool is_close = std::abs(m_set_temp.value() - current_target) < 0.05;
+        const float next_target = is_close ? m_set_temp.value() : current_target + delta_target;
         s_pid.target() = next_target;
-        s_pid.d_target() = target_d_temp;
+        s_pid.d_target() = compute_target_d_temp(next_target, temp);
 
         // Calculate Feedforward
         // 1. Dynamic FF: Power required to change temperature (Heat Capacity)
@@ -381,9 +383,9 @@ class TempControl : public Module {
     }
 
     // Track filtered temperature and temperature derivatives.
+    float filt_d_temp = 0.0f;
     if (temp_ok) {
       s_temp_filter.addSample(now_sec, temp);
-      float filt_d_temp = 0.0f;
       if (m_last_temp != 0.0f) {
         const float delta_temp = temp - m_last_temp;
         const float delta_time = (now_msec - m_last_msec) * 1.0e-3;
