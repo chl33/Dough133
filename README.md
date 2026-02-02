@@ -16,8 +16,8 @@ This repository contains:
  of the device are in this are at my blog.
 
 Please also see the other entries describing this project:
-- [Dough133](https://selectiveappeal.org/posts/dough133/)
-- [Dough133 Electronics Design](https://selectiveappeal.org/posts/dough133-electronics/)
+- [Building a DIY Sourdough Proofer (Dough133)](https://selectiveappeal.org/posts/dough133/)
+- [Dough133 Electronics: Designing a Custom ESP32 Controller for Proofing Sourdough](https://selectiveappeal.org/posts/dough133-electronics/)
 
 Components needed for making this device, along with links and approximate price as of September
  2024:
