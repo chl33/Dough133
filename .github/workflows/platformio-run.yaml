@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install PlatformIO Core
-        run: pip install --upgrade platformio
+        run: pip install --upgrade platformio intelhex
       - name: Setup secrets for build
         run: cp secrets.ini.example secrets.ini && cp secrets-usb.ini.example secrets-usb.ini
       - name: Build PlatformIO Project

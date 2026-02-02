@@ -20,11 +20,12 @@
 #include <og3/web.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <functional>
 #include <limits>
 
-#define VERSION "0.9.7"
+#define VERSION "0.9.95"
 
 // TODO(chrishl):
 //  - Get board temperature working.
@@ -62,6 +63,8 @@ constexpr float kDefaultCtlD = 5.0f;
 constexpr float kDefaultCtlIMin = -0.15f;
 constexpr float kDefaultCtlIMax = 0.15f;
 constexpr float kDefaultCtlFFPerDeltaC = 0.01f;
+constexpr float kDefaultRampRate = 0.05f;  // °C/sec
+constexpr float kDefaultFFPerRate = 0.0f;  // pwm / (°C/sec)
 constexpr float kTargetTempMax = 35.0f;
 constexpr float kTargetTempMin = 15.0f;
 
@@ -206,13 +209,18 @@ class TempControl : public Module {
   TempControl()
       : Module("temp_ctl", &s_app.module_system()),
         m_scheduler(&s_app.tasks()),
-        m_state("state", kStateDisabled, "", "heater state", kNoFlag, s_vg),
+        m_state("state", kStateDisabled, "heater state", kStateError, state_names, kNoFlag, s_vg),
         m_temp_min_ok("temp_min_ok", kDefaultMinValidTemp, units::kCelsius, "Min valid temperature",
                       kCfgFlag, 1, s_cvg),
         m_temp_max_ok("temp_max_ok", kDefaultMaxValidTemp, units::kCelsius, "Max valid temperature",
                       kCfgFlag, 1, s_cvg),
         m_ctl_ff_per_delta_c("ctl_ff_per_delta_c", kDefaultCtlFFPerDeltaC, "pwm/deltaC",
                              "FF per deltaC", kCfgFlag, 3, s_cvg),
+        m_set_temp("set_temp", kDefaultTargetTemp, units::kCelsius, "Target Temperature", kCfgFlag,
+                   1, s_cmdvg),
+        m_ramp_rate("ramp_rate", kDefaultRampRate, "°C/s", "Ramp Rate", kCfgFlag, 3, s_cvg),
+        m_ff_per_rate("ff_per_rate", kDefaultFFPerRate, "pwm/(°C/s)", "FF per Rate", kCfgFlag, 3,
+                      s_cvg),
         m_heat_mode(kHtrMode, kOff, "", "heater mode", kNoFlag, s_vg),
         m_fan_mode(kFanMode, kOff, "", "fan mode", kNoFlag, s_vg) {
     add_init_fn([this]() {
@@ -221,19 +229,17 @@ class TempControl : public Module {
       had->addDiscoveryCallback([this](HADiscovery* had, JsonDocument* json) -> bool {
         return this->haDiscovery(had, json);
       });
+      had->addDiscoveryCallback([this](HADiscovery* had, JsonDocument* json) {
+        return had->addEnum(json, m_state, ha::device_type::kSensor, nullptr);
+      });
+      had->addDiscoveryCallback([this](HADiscovery* had, JsonDocument* json) {
+        return had->addBinarySensor(json, s_relay_fan.isHighVar(),
+                                    ha::device_class::binary_sensor::kRunning);
+      });
     });  // end of init-fn
   }
 
-  void setFeedForward() {
-    if (initialTemp() > 0.0f) {
-      s_pid.feedforward() = (s_pid.target().value() - initialTemp()) * m_ctl_ff_per_delta_c.value();
-    }
-  }
-
-  void setTargetTemp(float target) {
-    s_pid.target() = target;
-    setFeedForward();
-  }
+  void setTargetTemp(float target) { m_set_temp = target; }
 
   bool enabled() const { return m_state.value() == kStateEnabled; }
 
@@ -248,6 +254,14 @@ class TempControl : public Module {
         // Make sure feedforward temperature will be recomputed if control is re-enabled.
         m_initial_temp = kUninitializedTemp;
         s_pid.feedforward() = 0.0f;
+        // Start ramping from current temperature
+        if (s_shtc3_enclosure.read()) {
+          s_pid.target() = s_shtc3_enclosure.temperature();
+          s_pid.d_target() = 0.0f;
+        } else {
+          s_pid.target() = m_set_temp.value();
+          s_pid.d_target() = 0.0f;
+        }
         setState(kStateEnabled, 100);
         break;
     }
@@ -291,13 +305,13 @@ class TempControl : public Module {
   float initialTemp() const { return m_initial_temp; }
 
   void turnFanOff() {
-    s_relay_fan.turnOff();
-    m_fan_mode = kOff;
+    if (m_fan_mode.value() == kOff) {
+      s_relay_fan.turnOff();
+    } else {
+      s_relay_fan.turnOn();
+    }
   }
-  void turnFanOn() {
-    s_relay_fan.turnOn();
-    m_fan_mode = kHigh;
-  }
+  void turnFanOn() { s_relay_fan.turnOn(); }
 
   void show_state() {
     char display[80];
@@ -323,31 +337,67 @@ class TempControl : public Module {
     if (!s_shtc3_room.read()) {
       s_app.log().logf("Failed to read SHTC3 room sensor");
     }
-    const float temp = s_shtc3_enclosure.temperature();
     const long now_msec = millis();
+    const float temp = s_shtc3_enclosure.temperature();
+    const bool temp_ok = temp >= m_temp_min_ok.value() && temp <= m_temp_max_ok.value();
     const float now_sec = now_msec * 1e-3;
 
-    if (m_initial_temp == kUninitializedTemp) {
-      m_initial_temp = temp;
-      setFeedForward();
-    }
-
-    // Track filtered temperature and temperature derivatives.
-    s_temp_filter.addSample(now_sec, temp);
-    float filt_d_temp = 0.0f;
-    if (m_last_temp != 0.0f) {
-      const float delta_temp = temp - m_last_temp;
-      const float delta_time = (now_msec - m_last_msec) * 1.0e-3;
-      const float dtemp = delta_temp / delta_time;
-      filt_d_temp = s_d_temp_filter.addSample(now_sec, dtemp);
-    }
-    m_last_temp = temp;
-    m_last_msec = now_msec;
-
-    if (temp < m_temp_min_ok.value() || temp > m_temp_max_ok.value()) {
+    if (!temp_ok) {
       s_app.log().logf("Temperature %.1f outside valid range %.1f-%.1f", temp,
                        m_temp_min_ok.value(), m_temp_min_ok.value());
       setState(kStateError, 10 * kMsecInSec);
+    }
+
+    // Store the enclosur temperature when control is first enabled.
+    if (m_state.value() == kStateEnabled && m_initial_temp == kUninitializedTemp) {
+      m_initial_temp = temp;
+    }
+
+    // Return a target d_temp of -ramp_rate or ramp_rate, unless within a degree of them
+    //  target, in which case scale ramp linearly to zero when error is zero.
+    auto compute_target_d_temp = [this](float goal, float current_target) {
+      const float error = goal - current_target;
+      const float scale = (error > 1.0    ? 1.0      // increase at full-ramp rate.
+                           : error < -1.0 ? -1.0     // decrease at full-ramp rate.
+                                          : error);  // increase/decrease scaled by error.
+      return scale * m_ramp_rate.value();
+    };
+
+    // Ramping and Feedforward Logic
+    if (m_state.value() == kStateEnabled && m_last_msec > 0) {
+      const float dt = (now_msec - m_last_msec) * 1.0e-3;
+      if (dt > 0.0f && dt < 2.0f) {  // Sanity check on dt
+        const float current_target = s_pid.target().value();
+        const float target_d_temp = compute_target_d_temp(m_set_temp.value(), current_target);
+        const float delta_target = target_d_temp * dt;
+        const bool is_close = std::abs(m_set_temp.value() - current_target) < 0.05;
+        const float next_target = is_close ? m_set_temp.value() : current_target + delta_target;
+        s_pid.target() = next_target;
+        s_pid.d_target() = compute_target_d_temp(next_target, temp);
+
+        // Calculate Feedforward
+        // 1. Dynamic FF: Power required to change temperature (Heat Capacity)
+        const float dynamic_ff = target_d_temp * m_ff_per_rate.value();
+
+        // 2. Static FF: Power required to maintain delta T (Insulation Loss)
+        const float static_ff = (next_target - m_initial_temp) * m_ctl_ff_per_delta_c.value();
+
+        s_pid.feedforward() = static_ff + dynamic_ff;
+      }
+    }
+
+    // Track filtered temperature and temperature derivatives.
+    float filt_d_temp = 0.0f;
+    if (temp_ok) {
+      s_temp_filter.addSample(now_sec, temp);
+      if (m_last_temp != 0.0f) {
+        const float delta_temp = temp - m_last_temp;
+        const float delta_time = (now_msec - m_last_msec) * 1.0e-3;
+        const float dtemp = delta_temp / delta_time;
+        filt_d_temp = s_d_temp_filter.addSample(now_sec, dtemp);
+      }
+      m_last_temp = temp;
+      m_last_msec = now_msec;
     }
 
     switch (m_state.value()) {
@@ -392,6 +442,7 @@ class TempControl : public Module {
     html::writeRowInto(out, s_pid.target());
     html::writeRowInto(out, m_heat_mode);
     html::writeRowInto(out, m_fan_mode);
+    html::writeRowInto(out, s_relay_fan.isHighVar());
     html::writeRowInto(out, s_shtc3_enclosure.temperatureVar());
     html::writeRowInto(out, s_shtc3_enclosure.humidityVar());
     html::writeRowInto(out, s_shtc3_room.temperatureVar());
@@ -433,8 +484,10 @@ class TempControl : public Module {
   }
   void mqttSetFanMode(const char* topic, const char* payload, size_t len) {
     if (0 == strncmp(payload, kOff, len)) {
+      m_fan_mode = kOff;
       turnFanOff();
     } else if (0 == strncmp(payload, kHigh, len)) {
+      m_fan_mode = kHigh;
       turnFanOn();
     } else {
       s_app.log().logf("setMode('%s', (%d)'%s') unknown mode", topic, static_cast<int>(len),
@@ -456,16 +509,22 @@ class TempControl : public Module {
   }
   bool haDiscovery(HADiscovery* had, JsonDocument* json) {
     json->clear();
+
+    {
+      // The variable is not used for addRoot() -- this just sets device informaton.
+      HADiscovery::Entry entry(m_temp_min_ok, ha::device_type::kClimate, nullptr);
+      had->addRoot(json, entry);
+    }
+
     String name = "thermostat";
-    had->addRoot(json, nullptr);
     auto& js = *json;
     js["name"] = name;
     js["mode_cmd_t"] = "~/mode/set";
     js["mode_stat_t"] = "~/dough";
     js["mode_stat_tpl"] = "{{value_json.htr_mode}}";  // Set state to "off", "heat";
-    js["temp_cmd_t"] = "~/target/set";
+    js["temp_cmd_t"] = "~/set_temp/set";
     js["temp_stat_t"] = "~/dough_cmd";
-    js["temp_stat_tpl"] = "{{value_json.target}}";
+    js["temp_stat_tpl"] = "{{value_json.set_temp}}";
     js["temperature_unit"] = "C";
     js["fan_mode_cmd_t"] = "~/fan_mode/set";
     js["fan_mode_stat_t"] = "~/dough";
@@ -490,7 +549,7 @@ class TempControl : public Module {
     had->mqttSubscribe("fan_mode/set", [this](const char* topic, const char* payload, size_t len) {
       this->mqttSetFanMode(topic, payload, len);
     });
-    had->mqttSubscribe("target/set", [this](const char* topic, const char* payload, size_t len) {
+    had->mqttSubscribe("set_temp/set", [this](const char* topic, const char* payload, size_t len) {
       this->mqttSetTargetTemp(topic, payload, len);
     });
 
@@ -499,7 +558,7 @@ class TempControl : public Module {
 
  private:
   TaskIdScheduler m_scheduler;
-  EnumVariable<State> m_state;
+  EnumStrVariable<State> m_state;
   float m_initial_temp = kUninitializedTemp;
   float m_last_temp = 0.0f;
   unsigned long m_last_msec = 0;
@@ -508,6 +567,9 @@ class TempControl : public Module {
   FloatVariable m_temp_min_ok;
   FloatVariable m_temp_max_ok;
   FloatVariable m_ctl_ff_per_delta_c;
+  FloatVariable m_set_temp;
+  FloatVariable m_ramp_rate;
+  FloatVariable m_ff_per_rate;
   Variable<String> m_heat_mode;  // heater mode for HA thermostat ('off' / 'on').
   Variable<String> m_fan_mode;   // fan mode for HA thermostat ('off' / 'high').
 };
