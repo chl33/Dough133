@@ -232,6 +232,10 @@ class TempControl : public Module {
       had->addDiscoveryCallback([this](HADiscovery* had, JsonDocument* json) {
         return had->addEnum(json, m_state, ha::device_type::kSensor, nullptr);
       });
+      had->addDiscoveryCallback([this](HADiscovery* had, JsonDocument* json) {
+        return had->addBinarySensor(json, s_relay_fan.isHighVar(),
+                                    ha::device_class::binary_sensor::kRunning);
+      });
     });  // end of init-fn
   }
 
@@ -301,13 +305,13 @@ class TempControl : public Module {
   float initialTemp() const { return m_initial_temp; }
 
   void turnFanOff() {
-    s_relay_fan.turnOff();
-    m_fan_mode = kOff;
+    if (m_fan_mode.value() == kOff) {
+      s_relay_fan.turnOff();
+    } else {
+      s_relay_fan.turnOn();
+    }
   }
-  void turnFanOn() {
-    s_relay_fan.turnOn();
-    m_fan_mode = kHigh;
-  }
+  void turnFanOn() { s_relay_fan.turnOn(); }
 
   void show_state() {
     char display[80];
@@ -438,6 +442,7 @@ class TempControl : public Module {
     html::writeRowInto(out, s_pid.target());
     html::writeRowInto(out, m_heat_mode);
     html::writeRowInto(out, m_fan_mode);
+    html::writeRowInto(out, s_relay_fan.isHighVar());
     html::writeRowInto(out, s_shtc3_enclosure.temperatureVar());
     html::writeRowInto(out, s_shtc3_enclosure.humidityVar());
     html::writeRowInto(out, s_shtc3_room.temperatureVar());
@@ -479,8 +484,10 @@ class TempControl : public Module {
   }
   void mqttSetFanMode(const char* topic, const char* payload, size_t len) {
     if (0 == strncmp(payload, kOff, len)) {
+      m_fan_mode = kOff;
       turnFanOff();
     } else if (0 == strncmp(payload, kHigh, len)) {
+      m_fan_mode = kHigh;
       turnFanOn();
     } else {
       s_app.log().logf("setMode('%s', (%d)'%s') unknown mode", topic, static_cast<int>(len),
