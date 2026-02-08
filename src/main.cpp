@@ -91,6 +91,7 @@ static const char kCommandP[] = "cmd_p";
 static const char kCommandD[] = "cmd_d";
 static const char kCommandI[] = "cmd_i";
 static const char kCommandFF[] = "cmd_ff";
+static const char kTestCommand[] = "cmd_test";
 
 static const char kHtrMode[] = "htr_mode";
 static const char kFanMode[] = "fan_mode";
@@ -198,6 +199,7 @@ class TempControl : public Module {
     kStateEnabled,   // heater control is enabled
     kStateCooldown,  // run fan after heating to cooldown
     kStateError,     // a problem was detected.
+    kStateCommand,   // constant-output test state (m_test_command)
   };
 
   static const char* state_names[];
@@ -209,7 +211,7 @@ class TempControl : public Module {
   TempControl()
       : Module("temp_ctl", &s_app.module_system()),
         m_scheduler(&s_app.tasks()),
-        m_state("state", kStateDisabled, "heater state", kStateError, state_names, kNoFlag, s_vg),
+        m_state("state", kStateDisabled, "heater state", kStateCommand, state_names, kNoFlag, s_vg),
         m_temp_min_ok("temp_min_ok", kDefaultMinValidTemp, units::kCelsius, "Min valid temperature",
                       kCfgFlag, 1, s_cvg),
         m_temp_max_ok("temp_max_ok", kDefaultMaxValidTemp, units::kCelsius, "Max valid temperature",
@@ -221,6 +223,7 @@ class TempControl : public Module {
         m_ramp_rate("ramp_rate", kDefaultRampRate, "°C/s", "Ramp Rate", kCfgFlag, 3, s_cvg),
         m_ff_per_rate("ff_per_rate", kDefaultFFPerRate, "pwm/(°C/s)", "FF per Rate", kCfgFlag, 3,
                       s_cvg),
+        m_test_command("test_cmd", 0.0f, "pwm", "Test command", kCfgFlag, 3, s_cmdvg),
         m_heat_mode(kHtrMode, kOff, "", "heater mode", kNoFlag, s_vg),
         m_fan_mode(kFanMode, kOff, "", "fan mode", kNoFlag, s_vg) {
     add_init_fn([this]() {
@@ -251,6 +254,7 @@ class TempControl : public Module {
       case kStateDisabled:
       case kStateCooldown:
       case kStateError:
+      case kStateCommand:
         // Make sure feedforward temperature will be recomputed if control is re-enabled.
         m_initial_temp = kUninitializedTemp;
         s_pid.feedforward() = 0.0f;
@@ -271,6 +275,7 @@ class TempControl : public Module {
     // Disable control from current state.
     switch (m_state.value()) {
       case kStateEnabled:
+      case kStateCommand:
         setState(kStateCooldown, 100);
         break;
       case kStateDisabled:
@@ -299,6 +304,10 @@ class TempControl : public Module {
     } else if (enable && !enabled()) {
       m_scheduler.runIn(1, [this]() { setEnable(); });
     }
+  }
+
+  void delaySetTestCommand() {
+    m_scheduler.runIn(1, [this]() { setState(kStateCommand, kUpdateOnMsec); });
   }
 
   long msecInState() const { return millis() - m_last_state_change_msec; }
@@ -425,6 +434,12 @@ class TempControl : public Module {
       case kStateEnabled: {
         const float cmd = s_pid.command(temp, filt_d_temp, now_msec);
         heaterOn(cmd);
+        turnFanOn();
+        sameState(kUpdateOnMsec);
+        break;
+      }
+      case kStateCommand: {
+        heaterOn(m_test_command.value());
         turnFanOn();
         sameState(kUpdateOnMsec);
         break;
@@ -570,15 +585,13 @@ class TempControl : public Module {
   FloatVariable m_set_temp;
   FloatVariable m_ramp_rate;
   FloatVariable m_ff_per_rate;
+  FloatVariable m_test_command;
   Variable<String> m_heat_mode;  // heater mode for HA thermostat ('off' / 'on').
   Variable<String> m_fan_mode;   // fan mode for HA thermostat ('off' / 'high').
 };
 
 const char* TempControl::state_names[] = {
-    "Off",
-    "Running",
-    "Cooling...",
-    "Error!",
+    "Off", "Running", "Cooling...", "Error!", "Test Command",
 };
 
 TempControl s_temp_control;
@@ -594,6 +607,11 @@ void handleEnable(AsyncWebServerRequest* request) {
 void handleDisable(AsyncWebServerRequest* request) {
   s_app.log().logf("http -> disable");
   s_temp_control.delaySetEnable(false);
+  request->redirect("/");
+}
+void handleTestCommand(AsyncWebServerRequest* request) {
+  s_app.log().logf("http -> test command");
+  s_temp_control.delaySetTestCommand();
   request->redirect("/");
 }
 
@@ -652,6 +670,8 @@ og3::WebButton s_button_config(&s_app.web_server(), "Configuration", s_config_ur
 og3::WebButton s_button_enable(&s_app.web_server(), "Turn on", "/doughlee/enable", handleEnable);
 og3::WebButton s_button_disable(&s_app.web_server(), "Turn off", "/doughlee/disable",
                                 handleDisable);
+og3::WebButton s_button_test_command(&s_app.web_server(), "Test command", "/doughlee/test_command",
+                                     handleTestCommand);
 og3::WebButton s_button_doughl33_target(&s_app.web_server(), "Set target temp", "/doughlee/target",
                                         handleUpdateTarget);
 og3::WebButton s_button_doughl33_config(&s_app.web_server(), "Temperature control",
@@ -674,6 +694,7 @@ void handleWebRoot(AsyncWebServerRequest* request) {
   } else {
     s_button_enable.add_button(&s_html);
   }
+  s_button_test_command.add_button(&s_html);
   s_button_doughl33_target.add_button(&s_html);
   s_button_config.add_button(&s_html);
   s_button_restart.add_button(&s_html);
