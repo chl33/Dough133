@@ -25,7 +25,7 @@
 #include <functional>
 #include <limits>
 
-#define VERSION "0.9.95"
+#define VERSION "0.9.96"
 
 // TODO(chrishl):
 //  - Get board temperature working.
