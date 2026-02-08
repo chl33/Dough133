@@ -348,7 +348,7 @@ class TempControl : public Module {
       setState(kStateError, 10 * kMsecInSec);
     }
 
-    // Store the enclosur temperature when control is first enabled.
+    // Store the enclosure temperature when control is first enabled.
     if (m_state.value() == kStateEnabled && m_initial_temp == kUninitializedTemp) {
       m_initial_temp = temp;
     }
@@ -714,6 +714,8 @@ void setup() {
   og3::s_app.config().read_config(og3::s_cmdvg);
   og3::s_button_reader.read();  // read state of the button on startup.
   og3::heaterOff();
+  // This should start the system reporting state: temperature, etc...
+  og3::s_temp_control.update();
 }
 
 void loop() {
