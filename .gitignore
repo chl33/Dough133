@@ -8,3 +8,4 @@
 *.old
 secret*.ini
 /.ccls-cache/
+venv
