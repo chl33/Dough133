@@ -11,7 +11,8 @@ from sklearn.linear_model import LinearRegression
 
 
 def main() -> None:
-    """Load the data."""
+    """Command line interface."""
+    # Load the data
     csv_path = Path("pwm_to_watts.csv")
     if not csv_path.exists():
         print(f"Error: {csv_path} not found.")
@@ -19,22 +20,25 @@ def main() -> None:
 
     df = pd.read_csv(csv_path)
 
+    pwm_label = "PWM"
+    watts_label = "Watts"
+
     # Ensure column names match
     # Expecting "PWM" and "Watts"
-    x_mat = df[["PWM"]].to_numpy()
-    y_vec = df["Watts"].to_numpy()
+    pwm_mat = df[[pwm_label]].to_numpy()
+    watt_vec = df[watts_label].to_numpy()
 
     # Fit linear regression
     model = LinearRegression()
-    model.fit(x_mat, y_vec)
+    model.fit(pwm_mat, watt_vec)
 
     # Calculate R-squared
-    r_squared = model.score(x_mat, y_vec)
+    r_squared = model.score(pwm_mat, watt_vec)
     slope = model.coef_[0]
     intercept = model.intercept_
 
     # Generate points for the line
-    x_range = np.linspace(x_mat.min(), x_mat.max(), 100).reshape(-1, 1)
+    x_range = np.linspace(pwm_mat.min(), pwm_mat.max(), 100).reshape(-1, 1)
     y_range = model.predict(x_range)
 
     # Create Plotly figure
@@ -43,8 +47,8 @@ def main() -> None:
     # Add data points
     fig.add_trace(
         go.Scatter(
-            x=df["PWM"],
-            y=df["Watts"],
+            x=df[pwm_label],
+            y=df[watts_label],
             mode="markers",
             name="Measured Data",
             marker={"size": 10, "color": "blue"},
