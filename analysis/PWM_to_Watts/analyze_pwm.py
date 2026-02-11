@@ -1,4 +1,8 @@
-import os
+"""A program to fit and plot PWM command -> Watts for Dough133."""
+
+# ruff: noqa: T201, ERA001, INP001
+
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -6,10 +10,10 @@ import plotly.graph_objects as go
 from sklearn.linear_model import LinearRegression
 
 
-def main():
-    """Load the data"""
-    csv_path = "pwm_to_watts.csv"
-    if not os.path.exists(csv_path):
+def main() -> None:
+    """Load the data."""
+    csv_path = Path("pwm_to_watts.csv")
+    if not csv_path.exists():
         print(f"Error: {csv_path} not found.")
         return
 
@@ -17,20 +21,20 @@ def main():
 
     # Ensure column names match
     # Expecting "PWM" and "Watts"
-    X = df[["PWM"]].values
-    y = df["Watts"].values
+    x_mat = df[["PWM"]].to_numpy()
+    y_vec = df["Watts"].to_numpy()
 
     # Fit linear regression
     model = LinearRegression()
-    model.fit(X, y)
+    model.fit(x_mat, y_vec)
 
     # Calculate R-squared
-    r_squared = model.score(X, y)
+    r_squared = model.score(x_mat, y_vec)
     slope = model.coef_[0]
     intercept = model.intercept_
 
     # Generate points for the line
-    x_range = np.linspace(X.min(), X.max(), 100).reshape(-1, 1)
+    x_range = np.linspace(x_mat.min(), x_mat.max(), 100).reshape(-1, 1)
     y_range = model.predict(x_range)
 
     # Create Plotly figure
@@ -43,8 +47,8 @@ def main():
             y=df["Watts"],
             mode="markers",
             name="Measured Data",
-            marker=dict(size=10, color="blue"),
-        )
+            marker={"size": 10, "color": "blue"},
+        ),
     )
 
     # Add regression line
@@ -54,8 +58,8 @@ def main():
             y=y_range,
             mode="lines",
             name=f"Fit: y = {slope:.2f}x + {intercept:.2f}",
-            line=dict(color="red", width=2),
-        )
+            line={"color": "red", "width": 2},
+        ),
     )
 
     # Update layout
@@ -64,7 +68,7 @@ def main():
         xaxis_title="PWM Command",
         yaxis_title="Power (Watts)",
         template="plotly_white",
-        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+        legend={"yanchor": "top", "y": 0.99, "xanchor": "left", "x": 0.01},
     )
 
     # Save as HTML snippet for Hugo
