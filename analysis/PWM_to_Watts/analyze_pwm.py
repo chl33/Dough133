@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Chris Lee and contributors.
+# Licensed under the MIT license. See LICENSE file in the project root for details.
+
 """A program to fit and plot PWM command -> Watts for Dough133."""
 
 # ruff: noqa: T201, ERA001, INP001
