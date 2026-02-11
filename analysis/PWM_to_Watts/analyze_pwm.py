@@ -4,9 +4,10 @@ import plotly.graph_objects as go
 from sklearn.linear_model import LinearRegression
 import os
 
+
 def main():
-    # Load the data
-    csv_path = 'pwm_to_watts.csv'
+    """Load the data"""
+    csv_path = "pwm_to_watts.csv"
     if not os.path.exists(csv_path):
         print(f"Error: {csv_path} not found.")
         return
@@ -15,8 +16,8 @@ def main():
 
     # Ensure column names match
     # Expecting "PWM" and "Watts"
-    X = df[['PWM']].values
-    y = df['Watts'].values
+    X = df[["PWM"]].values
+    y = df["Watts"].values
 
     # Fit linear regression
     model = LinearRegression()
@@ -35,30 +36,34 @@ def main():
     fig = go.Figure()
 
     # Add data points
-    fig.add_trace(go.Scatter(
-        x=df['PWM'],
-        y=df['Watts'],
-        mode='markers',
-        name='Measured Data',
-        marker=dict(size=10, color='blue')
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=df["PWM"],
+            y=df["Watts"],
+            mode="markers",
+            name="Measured Data",
+            marker=dict(size=10, color="blue"),
+        )
+    )
 
     # Add regression line
-    fig.add_trace(go.Scatter(
-        x=x_range.flatten(),
-        y=y_range,
-        mode='lines',
-        name=f'Fit: y = {slope:.2f}x + {intercept:.2f}',
-        line=dict(color='red', width=2)
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=x_range.flatten(),
+            y=y_range,
+            mode="lines",
+            name=f"Fit: y = {slope:.2f}x + {intercept:.2f}",
+            line=dict(color="red", width=2),
+        )
+    )
 
     # Update layout
     fig.update_layout(
-        title=f'PWM to Watts Relationship (R² = {r_squared:.4f})',
-        xaxis_title='PWM Command',
-        yaxis_title='Power (Watts)',
-        template='plotly_white',
-        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+        title=f"PWM to Watts Relationship (R² = {r_squared:.4f})",
+        xaxis_title="PWM Command",
+        yaxis_title="Power (Watts)",
+        template="plotly_white",
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
     )
 
     # Save as HTML snippet for Hugo
@@ -75,6 +80,7 @@ def main():
     print(f"Plot saved to {output_json}")
     print(f"Equation: Watts = {slope:.4f} * PWM + {intercept:.4f}")
     print(f"R-squared: {r_squared:.4f}")
+
 
 if __name__ == "__main__":
     main()
