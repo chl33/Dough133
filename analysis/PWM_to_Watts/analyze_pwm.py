@@ -3,7 +3,7 @@
 
 """A program to fit and plot PWM command -> Watts for Dough133."""
 
-# ruff: noqa: T201, ERA001, INP001
+# ruff: noqa: T201, INP001
 
 from pathlib import Path
 
@@ -78,17 +78,10 @@ def main() -> None:
         legend={"yanchor": "top", "y": 0.99, "xanchor": "left", "x": 0.01},
     )
 
-    # Save as HTML snippet for Hugo
-    # include_plotlyjs=False if you have it loaded globally in Hugo,
-    # but 'cdn' is safer for standalone snippets.
-    #    output_html = 'pwm_to_watts_plot.html'
-    #    fig.write_html(output_html, include_plotlyjs='cdn', full_html=False)
-
-    # fig.update_layout(template="plotly_dark", title="Mt Bruno Elevation")
+    # Write the plot as a figure that can be published on the web.
     output_json = "pwm_to_watts_plot.json"
     fig.write_json(output_json)
 
-    # print(f"Plot saved to {output_html}")
     print(f"Plot saved to {output_json}")
     print(f"Equation: Watts = {slope:.4f} * PWM + {intercept:.4f}")
     print(f"R-squared: {r_squared:.4f}")
