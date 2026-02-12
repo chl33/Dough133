@@ -56,7 +56,7 @@ constexpr int kFanOnMsec = 60 * kMsecInSec;
 
 constexpr float kDefaultTargetTemp = 27.0f;
 constexpr float kDefaultMinValidTemp = 10.0f;
-constexpr float kDefaultMaxValidTemp = 40.0f;
+constexpr float kDefaultMaxValidTemp = 70.0f;
 constexpr float kDefaultCtlP = 0.25f;
 constexpr float kDefaultCtlI = 0.001f;
 constexpr float kDefaultCtlD = 5.0f;
@@ -312,6 +312,7 @@ class TempControl : public Module {
 
   long msecInState() const { return millis() - m_last_state_change_msec; }
   float initialTemp() const { return m_initial_temp; }
+  float testCommand() const { return m_test_command.value(); }
 
   void turnFanOff() {
     if (m_fan_mode.value() == kOff) {
@@ -344,7 +345,11 @@ class TempControl : public Module {
       setState(kStateError, 10 * kMsecInSec);
     }
     if (!s_shtc3_room.read()) {
-      s_app.log().logf("Failed to read SHTC3 room sensor");
+      static bool s_warned = false;  // Not yet working, so only warn once.
+      if (!s_warned) {
+        s_app.log().logf("Failed to read SHTC3 room sensor");
+        s_warned = true;
+      }
     }
     const long now_msec = millis();
     const float temp = s_shtc3_enclosure.temperature();
@@ -610,7 +615,7 @@ void handleDisable(AsyncWebServerRequest* request) {
   request->redirect("/");
 }
 void handleTestCommand(AsyncWebServerRequest* request) {
-  s_app.log().logf("http -> test command");
+  s_app.log().logf("http -> test command (PWM: %.2f)", s_temp_control.testCommand());
   s_temp_control.delaySetTestCommand();
   request->redirect("/");
 }
