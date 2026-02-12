@@ -345,7 +345,11 @@ class TempControl : public Module {
       setState(kStateError, 10 * kMsecInSec);
     }
     if (!s_shtc3_room.read()) {
-      s_app.log().logf("Failed to read SHTC3 room sensor");
+      static bool s_warned = false;  // Not yet working, so only warn once.
+      if (!s_warned) {
+        s_app.log().logf("Failed to read SHTC3 room sensor");
+        s_warned = true;
+      }
     }
     const long now_msec = millis();
     const float temp = s_shtc3_enclosure.temperature();
