@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Chris Lee and contibuters.
+// Copyright (c) 2026 Chris Lee and contributors.
 // Licensed under the MIT license. See LICENSE file in the project root for details.
 
 // Spacers for supporting the OLED board cantilevered via a header from a parent board.
