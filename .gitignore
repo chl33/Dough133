@@ -10,3 +10,4 @@ secret*.ini
 /.ccls-cache/
 venv
 /analysis/PWM_to_Watts/pwm_to_watts_plot.json
+/analysis/Cooling/cooling_analysis.json

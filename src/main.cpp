@@ -25,7 +25,7 @@
 #include <functional>
 #include <limits>
 
-#define VERSION "0.9.96"
+#define VERSION "0.9.97"
 
 // TODO(chrishl):
 //  - Get board temperature working.
@@ -92,6 +92,7 @@ static const char kCommandD[] = "cmd_d";
 static const char kCommandI[] = "cmd_i";
 static const char kCommandFF[] = "cmd_ff";
 static const char kTestCommand[] = "cmd_test";
+static const char kTestCommandTime[] = "cmd_test_test";
 
 static const char kHtrMode[] = "htr_mode";
 static const char kFanMode[] = "fan_mode";
@@ -223,7 +224,9 @@ class TempControl : public Module {
         m_ramp_rate("ramp_rate", kDefaultRampRate, "°C/s", "Ramp Rate", kCfgFlag, 3, s_cvg),
         m_ff_per_rate("ff_per_rate", kDefaultFFPerRate, "pwm/(°C/s)", "FF per Rate", kCfgFlag, 3,
                       s_cvg),
-        m_test_command("test_cmd", 0.0f, "pwm", "Test command", kCfgFlag, 3, s_cmdvg),
+        m_test_command(kTestCommand, 0.0f, "pwm", "Test command", kCfgFlag, 3, s_cmdvg),
+        m_test_command_time(kTestCommandTime, 0.0f, "sec", "Test command sec", kCfgFlag, 1,
+                            s_cmdvg),
         m_heat_mode(kHtrMode, kOff, "", "heater mode", kNoFlag, s_vg),
         m_fan_mode(kFanMode, kOff, "", "fan mode", kNoFlag, s_vg) {
     add_init_fn([this]() {
@@ -313,6 +316,7 @@ class TempControl : public Module {
   long msecInState() const { return millis() - m_last_state_change_msec; }
   float initialTemp() const { return m_initial_temp; }
   float testCommand() const { return m_test_command.value(); }
+  float testCommandTime() const { return m_test_command_time.value(); }
 
   void turnFanOff() {
     if (m_fan_mode.value() == kOff) {
@@ -444,9 +448,22 @@ class TempControl : public Module {
         break;
       }
       case kStateCommand: {
-        heaterOn(m_test_command.value());
-        turnFanOn();
-        sameState(kUpdateOnMsec);
+        const int test_command_msec = static_cast<int>(testCommandTime() * 1e3);
+        if (test_command_msec <= 0 || msecInState() < test_command_msec) {
+          heaterOn(m_test_command.value());
+          turnFanOn();
+          if (test_command_msec > 0) {
+            const int msec_remaining = test_command_msec - msecInState();
+            sameState(std::min(msec_remaining, kUpdateOnMsec));
+          } else {
+            sameState(kUpdateOnMsec);
+          }
+        } else {
+          s_app.log().logf("Test command timed-out after %.1f sec.", msecInState() * 1e-3);
+          heaterOff();
+          turnFanOn();
+          setState(kStateCooldown, kUpdateOffMsec);
+        }
         break;
       }
     }
@@ -591,6 +608,7 @@ class TempControl : public Module {
   FloatVariable m_ramp_rate;
   FloatVariable m_ff_per_rate;
   FloatVariable m_test_command;
+  FloatVariable m_test_command_time;
   Variable<String> m_heat_mode;  // heater mode for HA thermostat ('off' / 'on').
   Variable<String> m_fan_mode;   // fan mode for HA thermostat ('off' / 'high').
 };
@@ -615,7 +633,8 @@ void handleDisable(AsyncWebServerRequest* request) {
   request->redirect("/");
 }
 void handleTestCommand(AsyncWebServerRequest* request) {
-  s_app.log().logf("http -> test command (PWM: %.2f)", s_temp_control.testCommand());
+  s_app.log().logf("http -> test command (PWM: %.2f, %2.1f sec)", s_temp_control.testCommand(),
+                   s_temp_control.testCommandTime());
   s_temp_control.delaySetTestCommand();
   request->redirect("/");
 }
