@@ -23,7 +23,7 @@
       await fetch('/api/target', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ set_temp: newTarget })
+        body: JSON.stringify({ setTemp: newTarget })
       });
     } catch (err) {
       console.error('Error setting target:', err);
@@ -61,19 +61,19 @@
       <div class="card-content">
         <div class="stat">
           <span class="label">Temperature</span>
-          <span class="value">{status.temp_enclosure.toFixed(1)}°C</span>
+          <span class="value">{status.tempEnclosure.toFixed(1)}°C</span>
         </div>
         <div class="stat">
           <span class="label">Humidity</span>
-          <span class="value">{status.hum_enclosure.toFixed(1)}%</span>
+          <span class="value">{status.humEnclosure.toFixed(1)}%</span>
         </div>
         <div class="stat">
           <span class="label">Filtered</span>
-          <span class="value">{status.temp_filt.toFixed(2)}°C</span>
+          <span class="value">{status.tempFilt.toFixed(2)}°C</span>
         </div>
         <div class="stat">
           <span class="label">Rate</span>
-          <span class="value">{status.temp_d_filt.toFixed(3)}°C/s</span>
+          <span class="value">{status.tempDFilt.toFixed(3)}°C/s</span>
         </div>
       </div>
     </section>
@@ -87,11 +87,11 @@
       <div class="card-content">
         <div class="stat">
           <span class="label">Temperature</span>
-          <span class="value">{status.temp_room.toFixed(1)}°C</span>
+          <span class="value">{status.tempRoom.toFixed(1)}°C</span>
         </div>
         <div class="stat">
           <span class="label">Humidity</span>
-          <span class="value">{status.hum_room.toFixed(1)}%</span>
+          <span class="value">{status.humRoom.toFixed(1)}%</span>
         </div>
       </div>
     </section>
@@ -110,7 +110,7 @@
               id="target-temp"
               type="number"
               step="0.5"
-              value={status.set_temp}
+              value={status.setTemp}
               on:change={setTargetTemp}
             />
             <button class="btn" class:btn-danger={status.state_idx !== 0} on:click={toggleEnable}>
@@ -127,8 +127,16 @@
           <span class="value">{(status.heater * 100).toFixed(1)}%</span>
         </div>
         <div class="stat">
+          <span class="label">Heater Mode</span>
+          <span class="value">{status.heatMode}</span>
+        </div>
+        <div class="stat">
           <span class="label">Fan</span>
           <span class="value" class:text-green={status.fan}>{status.fan ? 'ON' : 'OFF'}</span>
+        </div>
+        <div class="stat">
+          <span class="label">Fan Mode</span>
+          <span class="value">{status.fanMode}</span>
         </div>
       </div>
     </section>
@@ -142,19 +150,19 @@
       <div class="card-content">
         <div class="stat">
           <span class="label">P Term</span>
-          <span class="value">{status.cmd_p.toFixed(3)}</span>
+          <span class="value">{status.cmdP.toFixed(3)}</span>
         </div>
         <div class="stat">
           <span class="label">I Term</span>
-          <span class="value">{status.cmd_i.toFixed(3)}</span>
+          <span class="value">{status.cmdI.toFixed(3)}</span>
         </div>
         <div class="stat">
           <span class="label">D Term</span>
-          <span class="value">{status.cmd_d.toFixed(3)}</span>
+          <span class="value">{status.cmdD.toFixed(3)}</span>
         </div>
         <div class="stat">
           <span class="label">FF Term</span>
-          <span class="value">{status.cmd_ff.toFixed(3)}</span>
+          <span class="value">{status.cmdFF.toFixed(3)}</span>
         </div>
         <div class="stat total">
           <span class="label">Total Command</span>

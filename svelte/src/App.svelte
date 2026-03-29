@@ -16,16 +16,22 @@
   let error = null;
 
   export let config = writable({
-    temp_min_ok: 10,
-    temp_max_ok: 70,
-    ctl_ff_per_delta_c: 0.01,
-    ramp_rate: 0.05,
-    ff_per_rate: 0,
+    tempMinOk: 10,
+    tempMaxOk: 70,
+    ctlFeedforwardPerDeltaC: 0.01,
+    rampRate: 0.05,
+    feedforwardPerRate: 0,
+    setTemp: 25,
+    testCommand: 0,
+    testCommandSec: 60,
     kP: 0.25,
     kI: 0.001,
     kD: 5.0,
     iMax: 0.15,
-    iMin: -0.15
+    iMin: -0.15,
+    feedforward: 0,
+    commandMin: 0,
+    commandMax: 1
   });
 
   export let wifi = writable({
@@ -39,27 +45,28 @@
     port: 1883,
     authUser: '',
     authPassword: '',
+    enabled: true
   });
 
   export let systemStatus = writable({
     state: 'Off',
     state_idx: 0,
-    temp_enclosure: 0,
-    hum_enclosure: 0,
-    temp_room: 0,
-    hum_room: 0,
-    temp_filt: 0,
-    temp_d_filt: 0,
+    tempEnclosure: 0,
+    humEnclosure: 0,
+    tempRoom: 0,
+    humRoom: 0,
+    tempFilt: 0,
+    tempDFilt: 0,
     target: 0,
-    set_temp: 0,
+    setTemp: 0,
     heater: 0,
     fan: false,
-    htr_mode: 'off',
-    fan_mode: 'off',
-    cmd_p: 0,
-    cmd_i: 0,
-    cmd_d: 0,
-    cmd_ff: 0,
+    heatMode: 'off',
+    fanMode: 'off',
+    cmdP: 0,
+    cmdI: 0,
+    cmdD: 0,
+    cmdFF: 0,
     mqttConnected: false,
     software: '',
     hardware: 'Dough133'

@@ -56,17 +56,34 @@
   </header>
 
   <div class="config-grid">
+    <!-- Target & Test Settings -->
+    <section class="card">
+      <h2>Target & Test Settings</h2>
+      <div class="form-group">
+        <label for="setTemp">Target Temperature (°C)</label>
+        <input id="setTemp" type="number" step="0.1" bind:value={localConfig.setTemp} />
+      </div>
+      <div class="form-group">
+        <label for="testCommand">Test PWM Command (0-1)</label>
+        <input id="testCommand" type="number" step="0.01" min="0" max="1" bind:value={localConfig.testCommand} />
+      </div>
+      <div class="form-group">
+        <label for="testCommandSec">Test Duration (sec)</label>
+        <input id="testCommandSec" type="number" step="1" bind:value={localConfig.testCommandSec} />
+      </div>
+    </section>
+
     <!-- Safety Limits -->
     <section class="card">
       <h2>Safety Limits</h2>
       <div class="form-group">
-        <label for="temp_min_ok">Min Valid Temp (°C)</label>
-        <input id="temp_min_ok" type="number" step="1" bind:value={localConfig.temp_min_ok} />
+        <label for="tempMinOk">Min Valid Temp (°C)</label>
+        <input id="tempMinOk" type="number" step="1" bind:value={localConfig.tempMinOk} />
         <p class="help">Heater will shut off if enclosure temp is below this.</p>
       </div>
       <div class="form-group">
-        <label for="temp_max_ok">Max Valid Temp (°C)</label>
-        <input id="temp_max_ok" type="number" step="1" bind:value={localConfig.temp_max_ok} />
+        <label for="tempMaxOk">Max Valid Temp (°C)</label>
+        <input id="tempMaxOk" type="number" step="1" bind:value={localConfig.tempMaxOk} />
         <p class="help">Heater will shut off if enclosure temp is above this.</p>
       </div>
     </section>
@@ -75,18 +92,22 @@
     <section class="card">
       <h2>Ramping & Feedforward</h2>
       <div class="form-group">
-        <label for="ramp_rate">Ramp Rate (°C/s)</label>
-        <input id="ramp_rate" type="number" step="0.001" bind:value={localConfig.ramp_rate} />
+        <label for="rampRate">Ramp Rate (°C/s)</label>
+        <input id="rampRate" type="number" step="0.001" bind:value={localConfig.rampRate} />
       </div>
       <div class="form-group">
-        <label for="ctl_ff_per_delta_c">Static FF (PWM / Δ°C)</label>
-        <input id="ctl_ff_per_delta_c" type="number" step="0.001" bind:value={localConfig.ctl_ff_per_delta_c} />
+        <label for="ctlFeedforwardPerDeltaC">Static FF (PWM / Δ°C)</label>
+        <input id="ctlFeedforwardPerDeltaC" type="number" step="0.001" bind:value={localConfig.ctlFeedforwardPerDeltaC} />
         <p class="help">Feedforward power per degree above initial temp.</p>
       </div>
       <div class="form-group">
-        <label for="ff_per_rate">Dynamic FF (PWM / (°C/s))</label>
-        <input id="ff_per_rate" type="number" step="0.001" bind:value={localConfig.ff_per_rate} />
+        <label for="feedforwardPerRate">Dynamic FF (PWM / (°C/s))</label>
+        <input id="feedforwardPerRate" type="number" step="0.001" bind:value={localConfig.feedforwardPerRate} />
         <p class="help">Feedforward power proportional to ramp rate.</p>
+      </div>
+      <div class="form-group">
+        <label for="feedforward">PID Constant FF (0-1)</label>
+        <input id="feedforward" type="number" step="0.01" min="0" max="1" bind:value={localConfig.feedforward} />
       </div>
     </section>
 
@@ -112,6 +133,19 @@
       <div class="form-group">
         <label for="iMin">Integral Min (PWM)</label>
         <input id="iMin" type="number" step="0.01" bind:value={localConfig.iMin} />
+      </div>
+    </section>
+
+    <!-- Output Clamping -->
+    <section class="card">
+      <h2>Output Clamping</h2>
+      <div class="form-group">
+        <label for="commandMin">Min PWM Command (0-1)</label>
+        <input id="commandMin" type="number" step="0.01" min="0" max="1" bind:value={localConfig.commandMin} />
+      </div>
+      <div class="form-group">
+        <label for="commandMax">Max PWM Command (0-1)</label>
+        <input id="commandMax" type="number" step="0.01" min="0" max="1" bind:value={localConfig.commandMax} />
       </div>
     </section>
   </div>

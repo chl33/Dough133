@@ -13,7 +13,7 @@
   let saveMessage = '';
 
   $: mqttConfig = $mqtt;
-  $: status = $systemStatus;
+  $: sysStat = $systemStatus;
 
   function updateMqtt(field, value) {
     mqtt.update(m => {
@@ -51,38 +51,42 @@
 </script>
 
 <div class="page">
-  <h2 class="page-title">MQTT Configuration</h2>
+  <div class="header-row">
+    <h2 class="page-title">MQTT Configuration</h2>
+    <div class="status-badge" class:connected={sysStat.mqttConnected}>
+      {sysStat.mqttConnected ? 'Connected' : 'Disconnected'}
+    </div>
+  </div>
 
   <div class="card">
-    <div class="status-badge" class:disabled={status && !status.mqttConnected}>
-      {status && status.mqttConnected ? 'Connected' : 'Not connected'}
-    </div>
-
     <div class="form-group checkbox-group">
-      <label class="checkbox-label">
+      <label for="mqtt-enabled" class="checkbox-label">
         <input
+          id="mqtt-enabled"
           type="checkbox"
           bind:checked={mqttConfig.enabled}
           on:change={() => updateMqtt('enabled', mqttConfig.enabled)}
         />
-        Enable MQTT Updates
+        Enable MQTT
       </label>
     </div>
 
     <div class="form-group">
-      <label class="form-label">MQTT Broker Address</label>
+      <label for="hostAddr" class="form-label">MQTT Broker Address</label>
       <input
+        id="hostAddr"
         type="text"
         class="form-input"
-        placeholder="mqtt.example.com or 192.168.1.100"
+        placeholder="e.g. 192.168.1.100 or broker.hivemq.com"
         bind:value={mqttConfig.hostAddr}
         on:change={() => updateMqtt('hostAddr', mqttConfig.hostAddr)}
       />
     </div>
 
     <div class="form-group">
-      <label class="form-label">Port</label>
+      <label for="port" class="form-label">Port</label>
       <input
+        id="port"
         type="number"
         class="form-input"
         bind:value={mqttConfig.port}
@@ -91,22 +95,22 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Username (optional)</label>
+      <label for="authUser" class="form-label">Username (optional)</label>
       <input
+        id="authUser"
         type="text"
         class="form-input"
-        placeholder="Leave blank if not required"
         bind:value={mqttConfig.authUser}
         on:change={() => updateMqtt('authUser', mqttConfig.authUser)}
       />
     </div>
 
     <div class="form-group">
-      <label class="form-label">Password (optional)</label>
+      <label for="authPassword" class="form-label">Password (optional)</label>
       <input
+        id="authPassword"
         type="password"
         class="form-input"
-        placeholder="Leave blank if not required"
         bind:value={mqttConfig.authPassword}
         on:change={() => updateMqtt('authPassword', mqttConfig.authPassword)}
       />
@@ -126,11 +130,32 @@
 </div>
 
 <style>
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
   .page-title {
     font-size: 2rem;
     font-weight: 700;
     color: #1f2937;
-    margin-bottom: 1.5rem;
+    margin: 0;
+  }
+
+  .status-badge {
+    padding: 0.4rem 1rem;
+    border-radius: 2rem;
+    background: #fee2e2;
+    color: #991b1b;
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+
+  .status-badge.connected {
+    background: #d1fae5;
+    color: #065f46;
   }
 
   .card {
@@ -166,12 +191,6 @@
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
   }
 
-  .form-hint {
-    font-size: 0.75rem;
-    color: #6b7280;
-    margin-top: 0.25rem;
-  }
-
   .btn {
     display: inline-flex;
     align-items: center;
@@ -203,8 +222,8 @@
     margin-top: 1rem;
     padding: 0.75rem 1rem;
     border-radius: 0.5rem;
-    background: #ede9fe;
-    color: #5b21b6;
+    background: #dbeafe;
+    color: #1e40af;
     font-size: 0.875rem;
     font-weight: 500;
   }
@@ -214,21 +233,9 @@
     color: #991b1b;
   }
 
-  .status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    background: #d1fae5;
-    color: #065f46;
-  }
-  .status-badge.disabled {
-    background: #fee2e2;
-    color: #991b1b;
-  }
-
   .checkbox-group {
-    margin-top: 1rem;
+    display: flex;
+    align-items: center;
   }
 
   .checkbox-label {

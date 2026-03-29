@@ -215,22 +215,22 @@ class TempControl : public Module {
       : Module("temp_ctl", &s_app.module_system()),
         m_scheduler(&s_app.tasks()),
         m_state("state", kStateDisabled, "heater state", kStateCommand, state_names, kNoFlag, s_vg),
-        m_temp_min_ok("temp_min_ok", kDefaultMinValidTemp, units::kCelsius, "Min valid temperature",
+        m_temp_min_ok("tempMinOk", kDefaultMinValidTemp, units::kCelsius, "Min valid temperature",
                       kCfgFlag, 1, s_cvg),
-        m_temp_max_ok("temp_max_ok", kDefaultMaxValidTemp, units::kCelsius, "Max valid temperature",
+        m_temp_max_ok("tempMaxOk", kDefaultMaxValidTemp, units::kCelsius, "Max valid temperature",
                       kCfgFlag, 1, s_cvg),
-        m_ctl_ff_per_delta_c("ctl_ff_per_delta_c", kDefaultCtlFFPerDeltaC, "pwm/deltaC",
+        m_ctl_ff_per_delta_c("ctlFeedforwardPerDeltaC", kDefaultCtlFFPerDeltaC, "pwm/deltaC",
                              "FF per deltaC", kCfgFlag, 3, s_cvg),
-        m_set_temp("set_temp", kDefaultTargetTemp, units::kCelsius, "Target Temperature", kCfgFlag,
+        m_set_temp("setTemp", kDefaultTargetTemp, units::kCelsius, "Target Temperature", kCfgFlag,
                    1, s_cmdvg),
-        m_ramp_rate("ramp_rate", kDefaultRampRate, "°C/s", "Ramp Rate", kCfgFlag, 3, s_cvg),
-        m_ff_per_rate("ff_per_rate", kDefaultFFPerRate, "pwm/(°C/s)", "FF per Rate", kCfgFlag, 3,
-                      s_cvg),
-        m_test_command(kTestCommand, 0.0f, "pwm", "Test command", kCfgFlag, 3, s_cmdvg),
-        m_test_command_time(kTestCommandTime, 0.0f, "sec", "Test command sec", kCfgFlag, 1,
+        m_ramp_rate("rampRate", kDefaultRampRate, "°C/s", "Ramp Rate", kCfgFlag, 3, s_cvg),
+        m_ff_per_rate("feedforwardPerRate", kDefaultFFPerRate, "pwm/(°C/s)", "FF per Rate",
+                      kCfgFlag, 3, s_cvg),
+        m_test_command("testCommand", 0.0f, "pwm", "Test command", kCfgFlag, 3, s_cmdvg),
+        m_test_command_time("testCommandSec", 0.0f, "sec", "Test command sec", kCfgFlag, 1,
                             s_cmdvg),
-        m_heat_mode(kHtrMode, kOff, "", "heater mode", kNoFlag, s_vg),
-        m_fan_mode(kFanMode, kOff, "", "fan mode", kNoFlag, s_vg) {
+        m_heat_mode("heatMode", kOff, "", "heater mode", kNoFlag, s_vg),
+        m_fan_mode("fanMode", kOff, "", "fan mode", kNoFlag, s_vg) {
     add_init_fn([this]() {
       s_oled.addDisplayFn([this]() { show_state(); });
       auto* had = &s_app.ha_discovery();
@@ -492,22 +492,22 @@ class TempControl : public Module {
   void toJson(JsonObject& json) {
     json["state"] = state_names[m_state.value()];
     json["state_idx"] = static_cast<int>(m_state.value());
-    json["temp_enclosure"] = s_shtc3_enclosure.temperature();
-    json["hum_enclosure"] = s_shtc3_enclosure.humidity();
-    json["temp_room"] = s_shtc3_room.temperature();
-    json["hum_room"] = s_shtc3_room.humidity();
-    json["temp_filt"] = s_temp_filter.value();
-    json["temp_d_filt"] = s_d_temp_filter.value();
+    json["tempEnclosure"] = s_shtc3_enclosure.temperature();
+    json["humEnclosure"] = s_shtc3_enclosure.humidity();
+    json["tempRoom"] = s_shtc3_room.temperature();
+    json["humRoom"] = s_shtc3_room.humidity();
+    json["tempFilt"] = s_temp_filter.value();
+    json["tempDFilt"] = s_d_temp_filter.value();
     json["target"] = s_pid.target().value();
-    json["set_temp"] = m_set_temp.value();
+    json["setTemp"] = m_set_temp.value();
     json["heater"] = s_pwm_heater.dutyF();
     json["fan"] = s_relay_fan.isHigh();
-    json["htr_mode"] = m_heat_mode.value();
-    json["fan_mode"] = m_fan_mode.value();
-    json["cmd_p"] = s_pid.p_term();
-    json["cmd_i"] = s_pid.i_term();
-    json["cmd_d"] = s_pid.d_term();
-    json["cmd_ff"] = s_pid.ff_term();
+    json["heatMode"] = m_heat_mode.value();
+    json["fanMode"] = m_fan_mode.value();
+    json["cmdP"] = s_pid.p_term();
+    json["cmdI"] = s_pid.i_term();
+    json["cmdD"] = s_pid.d_term();
+    json["cmdFF"] = s_pid.ff_term();
   }
 
  protected:
@@ -784,11 +784,7 @@ static String s_body;
 NetHandlerStatus apiGetWifi(NetRequest* request, NetResponse* response) {
   JsonDocument jsondoc;
   JsonObject json = jsondoc.to<JsonObject>();
-  const auto& wifi = s_app.wifi_manager();
-  json["board"] = wifi.board();
-  json["wifiPassword"] = wifi.wifiPassword();
-  json["essId"] = wifi.essId();
-  json["ipAddr"] = wifi.ipAddr();
+  s_app.wifi_manager().variables().toJson(json, VariableBase::kConfig);
   s_body.clear();
   serializeJson(jsondoc, s_body);
   response->send(200, "application/json", s_body.c_str());
@@ -810,12 +806,7 @@ NetHandlerStatus putWifiConfig(NetRequest* request, NetResponse* response, JsonV
 NetHandlerStatus apiGetMqtt(NetRequest* request, NetResponse* response) {
   JsonDocument jsondoc;
   JsonObject json = jsondoc.to<JsonObject>();
-  const auto& mqtt = s_app.mqtt_manager();
-  json["enabled"] = mqtt.isEnabled();
-  json["hostAddr"] = mqtt.hostAddr();
-  json["port"] = mqtt.port();
-  json["authPassword"] = mqtt.authPassword();
-  json["authUser"] = mqtt.authUser();
+  s_app.mqtt_manager().variables().toJson(json, VariableBase::kConfig);
   s_body.clear();
   serializeJson(jsondoc, s_body);
   response->send(200, "application/json", s_body.c_str());
@@ -857,8 +848,8 @@ NetHandlerStatus apiGetStatus(NetRequest* request, NetResponse* response) {
 NetHandlerStatus apiGetConfig(NetRequest* request, NetResponse* response) {
   JsonDocument jsondoc;
   JsonObject json = jsondoc.to<JsonObject>();
-  s_cvg.toJson(json, 0);
-  s_pid.gains_vg().toJson(json, 0);
+  s_cvg.toJson(json, VariableBase::kConfig);
+  s_cmdvg.toJson(json, VariableBase::kConfig);
   s_body.clear();
   serializeJson(jsondoc, s_body);
   response->send(200, "application/json", s_body.c_str());
@@ -873,8 +864,8 @@ NetHandlerStatus putConfig(NetRequest* request, NetResponse* response, JsonVaria
   JsonObject obj = jsonIn.as<JsonObject>();
   s_cvg.updateFromJson(obj);
   s_app.config().write_config(s_cvg);
-  s_pid.gains_vg().updateFromJson(obj);
-  s_app.config().write_config(s_pid.gains_vg());
+  s_cmdvg.updateFromJson(obj);
+  s_app.config().write_config(s_cmdvg);
   response->send(200, "text/plain", "ok");
   NET_REPLY(request, ESP_OK);
 }

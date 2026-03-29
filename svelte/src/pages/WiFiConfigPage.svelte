@@ -52,8 +52,9 @@
 
   <div class="card">
     <div class="form-group">
-      <label class="form-label">Network SSID</label>
+      <label for="essId" class="form-label">Network SSID</label>
       <input
+        id="essId"
         type="text"
         class="form-input"
         placeholder="Enter WiFi network name"
@@ -63,8 +64,9 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Password</label>
+      <label for="wifiPassword" class="form-label">Password</label>
       <input
+        id="wifiPassword"
         type="password"
         class="form-input"
         placeholder="Enter WiFi password"
@@ -74,8 +76,9 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Device Hostname</label>
+      <label for="board" class="form-label">Device Hostname</label>
       <input
+        id="board"
         type="text"
         class="form-input"
         placeholder="dough-heater"
