@@ -857,8 +857,8 @@ NetHandlerStatus apiGetStatus(NetRequest* request, NetResponse* response) {
 NetHandlerStatus apiGetConfig(NetRequest* request, NetResponse* response) {
   JsonDocument jsondoc;
   JsonObject json = jsondoc.to<JsonObject>();
-  s_cvg.toJson(json);
-  s_pid.gains_vg().toJson(json);
+  s_cvg.toJson(json, 0);
+  s_pid.gains_vg().toJson(json, 0);
   s_body.clear();
   serializeJson(jsondoc, s_body);
   response->send(200, "application/json", s_body.c_str());
