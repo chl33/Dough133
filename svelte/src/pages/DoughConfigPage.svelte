@@ -136,18 +136,6 @@
       </div>
     </section>
 
-    <!-- Output Clamping -->
-    <section class="card">
-      <h2>Output Clamping</h2>
-      <div class="form-group">
-        <label for="commandMin">Min PWM Command (0-1)</label>
-        <input id="commandMin" type="number" step="0.01" min="0" max="1" bind:value={localConfig.commandMin} />
-      </div>
-      <div class="form-group">
-        <label for="commandMax">Max PWM Command (0-1)</label>
-        <input id="commandMax" type="number" step="0.01" min="0" max="1" bind:value={localConfig.commandMax} />
-      </div>
-    </section>
   </div>
 </div>
 
