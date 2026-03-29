@@ -315,6 +315,9 @@ class TempControl : public Module {
     m_scheduler.runIn(1, [this]() { setState(kStateCommand, kUpdateOnMsec); });
   }
 
+  void setFanOn() { mqttSetFanMode("api", kHigh, strlen(kHigh)); }
+  void setFanOff() { mqttSetFanMode("api", kOff, strlen(kOff)); }
+
   long msecInState() const { return millis() - m_last_state_change_msec; }
   float initialTemp() const { return m_initial_temp; }
   float testCommand() const { return m_test_command.value(); }
@@ -882,6 +885,18 @@ NetHandlerStatus apiPostDisable(NetRequest* request, NetResponse* response) {
   NET_REPLY(request, ESP_OK);
 }
 
+NetHandlerStatus apiPostFanOn(NetRequest* request, NetResponse* response) {
+  s_temp_control.setFanOn();
+  response->send(200, "application/json", "{\"isOk\":true}");
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus apiPostFanOff(NetRequest* request, NetResponse* response) {
+  s_temp_control.setFanOff();
+  response->send(200, "application/json", "{\"isOk\":true}");
+  NET_REPLY(request, ESP_OK);
+}
+
 NetHandlerStatus apiPutTarget(NetRequest* request, NetResponse* response, JsonVariant& jsonIn) {
   if (!jsonIn.is<JsonObject>()) {
     response->send(500, "text/plain", "not a json object");
@@ -918,6 +933,8 @@ void setup() {
 
   og3::s_app.web_server_module().on("/api/enable", HTTP_POST, og3::apiPostEnable);
   og3::s_app.web_server_module().on("/api/disable", HTTP_POST, og3::apiPostDisable);
+  og3::s_app.web_server_module().on("/api/fan/on", HTTP_POST, og3::apiPostFanOn);
+  og3::s_app.web_server_module().on("/api/fan/off", HTTP_POST, og3::apiPostFanOff);
   og3::s_app.web_server_module().on("/api/test_command", HTTP_POST, og3::apiPostTestCommand);
 
   og3::s_app.web_server_module().on("/api/restart", HTTP_POST,

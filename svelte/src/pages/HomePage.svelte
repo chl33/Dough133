@@ -8,11 +8,22 @@
   $: conf = $config;
 
   async function toggleEnable() {
-    const action = status.state_idx === 0 ? 'enable' : 'disable';
+    // Only call 'disable' if we are currently in the 'Running' state (idx 1)
+    const action = status.state_idx === 1 ? 'disable' : 'enable';
     try {
       await fetch(`/api/${action}`, { method: 'POST' });
     } catch (err) {
       console.error(`Error ${action}ing:`, err);
+    }
+  }
+
+  async function toggleFan() {
+    const isOff = status.fanMode === 'off';
+    const action = isOff ? 'on' : 'off';
+    try {
+      await fetch(`/api/fan/${action}`, { method: 'POST' });
+    } catch (err) {
+      console.error(`Error toggling fan ${action}:`, err);
     }
   }
 
@@ -113,8 +124,8 @@
               value={status.setTemp}
               on:change={setTargetTemp}
             />
-            <button class="btn" class:btn-danger={status.state_idx !== 0} on:click={toggleEnable}>
-              {status.state_idx === 0 ? 'Enable' : 'Disable'}
+            <button class="btn" class:btn-danger={status.state_idx === 1} on:click={toggleEnable}>
+              {status.state_idx === 1 ? 'Disable' : 'Enable'}
             </button>
           </div>
         </div>
@@ -130,13 +141,18 @@
           <span class="label">Heater Mode</span>
           <span class="value">{status.heatMode}</span>
         </div>
-        <div class="stat">
-          <span class="label">Fan</span>
-          <span class="value" class:text-green={status.fan}>{status.fan ? 'ON' : 'OFF'}</span>
-        </div>
-        <div class="stat">
-          <span class="label">Fan Mode</span>
-          <span class="value">{status.fanMode}</span>
+        <div class="control-group mt-2">
+          <label>Fan Control</label>
+          <div class="input-with-action">
+            <div class="stat flex-1">
+              <span class="label">State</span>
+              <span class="value" class:text-green={status.fan}>{status.fan ? 'ON' : 'OFF'} ({status.fanMode})</span>
+            </div>
+            <button class="btn btn-secondary" on:click={toggleFan}>
+              <Fan size={16} class="mr-1" />
+              {status.fanMode === 'off' ? 'Fan On' : 'Fan Off'}
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -245,6 +261,8 @@
     padding: 0.5rem 0;
   }
 
+  .flex-1 { flex: 1; }
+
   .stat .label {
     color: #6b7280;
     font-size: 0.875rem;
@@ -275,6 +293,7 @@
   .input-with-action {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
   }
 
   input {
@@ -285,6 +304,8 @@
   }
 
   .btn {
+    display: flex;
+    align-items: center;
     padding: 0.5rem 1rem;
     background: #059669;
     color: white;
@@ -292,13 +313,23 @@
     border-radius: 0.375rem;
     cursor: pointer;
     font-weight: 600;
+    white-space: nowrap;
   }
 
   .btn:hover { background: #047857; }
   .btn-danger { background: #dc2626; }
   .btn-danger:hover { background: #b91c1c; }
 
+  .btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+  }
+  .btn-secondary:hover { background: #e5e7eb; }
+
+  .mt-2 { margin-top: 0.5rem; }
   .mt-4 { margin-top: 1rem; }
+  :global(.mr-1) { margin-right: 0.25rem; }
 
   :global(.text-green) { color: #10b981; }
   :global(.text-blue) { color: #3b82f6; }

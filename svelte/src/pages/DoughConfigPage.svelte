@@ -1,5 +1,5 @@
 <script>
-  import { Settings, Save, RefreshCcw } from 'lucide-svelte';
+  import { Settings, Save, RefreshCcw, Play } from 'lucide-svelte';
 
   export let config;
 
@@ -35,6 +35,20 @@
   async function resetConfig() {
     localConfig = { ...conf };
   }
+
+  async function runTestCommand() {
+    if (!confirm(`Run test command with PWM ${localConfig.testCommand} for ${localConfig.testCommandSec}s?`)) return;
+    try {
+      const response = await fetch('/api/test_command', { method: 'POST' });
+      if (response.ok) {
+        alert('Test command started');
+      } else {
+        alert('Failed to start test command');
+      }
+    } catch (err) {
+      console.error('Error starting test:', err);
+    }
+  }
 </script>
 
 <div class="config-page">
@@ -58,7 +72,13 @@
   <div class="config-grid">
     <!-- Target & Test Settings -->
     <section class="card">
-      <h2>Target & Test Settings</h2>
+      <div class="card-header-with-action">
+        <h2>Target & Test Settings</h2>
+        <button class="btn btn-test" on:click={runTestCommand}>
+          <Play size={16} />
+          Run Test
+        </button>
+      </div>
       <div class="form-group">
         <label for="setTemp">Target Temperature (°C)</label>
         <input id="setTemp" type="number" step="0.1" bind:value={localConfig.setTemp} />
@@ -182,6 +202,21 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
+  .card-header-with-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid #f3f4f6;
+    padding-bottom: 0.75rem;
+  }
+
+  .card-header-with-action h2 {
+    margin-bottom: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
   h2 {
     font-size: 1.125rem;
     font-weight: 600;
@@ -242,4 +277,11 @@
   }
 
   .btn-secondary:hover { background: #e5e7eb; }
+
+  .btn-test {
+    background: #f59e0b;
+    color: white;
+    padding: 0.4rem 0.8rem;
+  }
+  .btn-test:hover { background: #d97706; }
 </style>
