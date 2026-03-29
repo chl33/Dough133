@@ -7,7 +7,8 @@ repos:
         (?x)^(
             .*/.pio/.*|
             .*\.proto|
-            .*\.json
+            .*\.json|
+            .*\.js
         )$
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.

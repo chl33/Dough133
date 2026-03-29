@@ -25,6 +25,8 @@
 #include <functional>
 #include <limits>
 
+#include "svelteesp32async.h"
+
 #define VERSION "0.9.97"
 
 // TODO(chrishl):
@@ -487,6 +489,27 @@ class TempControl : public Module {
     html::writeTableEnd(out);
   }
 
+  void toJson(JsonObject& json) {
+    json["state"] = state_names[m_state.value()];
+    json["state_idx"] = static_cast<int>(m_state.value());
+    json["temp_enclosure"] = s_shtc3_enclosure.temperature();
+    json["hum_enclosure"] = s_shtc3_enclosure.humidity();
+    json["temp_room"] = s_shtc3_room.temperature();
+    json["hum_room"] = s_shtc3_room.humidity();
+    json["temp_filt"] = s_temp_filter.value();
+    json["temp_d_filt"] = s_d_temp_filter.value();
+    json["target"] = s_pid.target().value();
+    json["set_temp"] = m_set_temp.value();
+    json["heater"] = s_pwm_heater.dutyF();
+    json["fan"] = s_relay_fan.isHigh();
+    json["htr_mode"] = m_heat_mode.value();
+    json["fan_mode"] = m_fan_mode.value();
+    json["cmd_p"] = s_pid.p_term();
+    json["cmd_i"] = s_pid.i_term();
+    json["cmd_d"] = s_pid.d_term();
+    json["cmd_ff"] = s_pid.ff_term();
+  }
+
  protected:
   void setState(State state, unsigned msec) {
     if (m_state.value() != state) {
@@ -756,14 +779,167 @@ og3::NetHandlerStatus handleConfigure(og3::NetRequest* request, og3::NetResponse
   NET_REPLY(request, ESP_OK);
 }
 
+static String s_body;
+
+NetHandlerStatus apiGetWifi(NetRequest* request, NetResponse* response) {
+  JsonDocument jsondoc;
+  JsonObject json = jsondoc.to<JsonObject>();
+  const auto& wifi = s_app.wifi_manager();
+  json["board"] = wifi.board();
+  json["wifiPassword"] = wifi.wifiPassword();
+  json["essId"] = wifi.essId();
+  json["ipAddr"] = wifi.ipAddr();
+  s_body.clear();
+  serializeJson(jsondoc, s_body);
+  response->send(200, "application/json", s_body.c_str());
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus putWifiConfig(NetRequest* request, NetResponse* response, JsonVariant& jsonIn) {
+  if (!jsonIn.is<JsonObject>()) {
+    response->send(500, "text/plain", "not a json object");
+    NET_REPLY(request, ESP_FAIL);
+  }
+  JsonObject obj = jsonIn.as<JsonObject>();
+  s_app.wifi_manager().variables().updateFromJson(obj);
+  s_app.config().write_config(s_app.wifi_manager().variables());
+  response->send(200, "text/plain", "ok");
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus apiGetMqtt(NetRequest* request, NetResponse* response) {
+  JsonDocument jsondoc;
+  JsonObject json = jsondoc.to<JsonObject>();
+  const auto& mqtt = s_app.mqtt_manager();
+  json["enabled"] = mqtt.isEnabled();
+  json["hostAddr"] = mqtt.hostAddr();
+  json["port"] = mqtt.port();
+  json["authPassword"] = mqtt.authPassword();
+  json["authUser"] = mqtt.authUser();
+  s_body.clear();
+  serializeJson(jsondoc, s_body);
+  response->send(200, "application/json", s_body.c_str());
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus putMqttConfig(NetRequest* request, NetResponse* response, JsonVariant& jsonIn) {
+  if (!jsonIn.is<JsonObject>()) {
+    response->send(500, "text/plain", "not a json object");
+    NET_REPLY(request, ESP_FAIL);
+  }
+  JsonObject obj = jsonIn.as<JsonObject>();
+  s_app.mqtt_manager().variables().updateFromJson(obj);
+  s_app.config().write_config(s_app.mqtt_manager().variables());
+  if (s_app.mqtt_manager().isEnabled() && !s_app.mqtt_manager().isConnected()) {
+    s_app.mqtt_manager().connect();
+  } else if (!s_app.mqtt_manager().isEnabled() && s_app.mqtt_manager().isConnected()) {
+    s_app.mqtt_manager().disconnect();
+  }
+  response->send(200, "text/plain", "ok");
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus apiGetStatus(NetRequest* request, NetResponse* response) {
+  JsonDocument jsondoc;
+  JsonObject json = jsondoc.to<JsonObject>();
+  json["mqttConnected"] = s_app.mqtt_manager().isConnected();
+  json["software"] = VERSION;
+  json["hardware"] = "Dough133";
+
+  s_temp_control.toJson(json);
+
+  s_body.clear();
+  serializeJson(jsondoc, s_body);
+  response->send(200, "application/json", s_body.c_str());
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus apiGetConfig(NetRequest* request, NetResponse* response) {
+  JsonDocument jsondoc;
+  JsonObject json = jsondoc.to<JsonObject>();
+  s_cvg.toJson(json);
+  s_pid.gains_vg().toJson(json);
+  s_body.clear();
+  serializeJson(jsondoc, s_body);
+  response->send(200, "application/json", s_body.c_str());
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus putConfig(NetRequest* request, NetResponse* response, JsonVariant& jsonIn) {
+  if (!jsonIn.is<JsonObject>()) {
+    response->send(500, "text/plain", "not a json object");
+    NET_REPLY(request, ESP_FAIL);
+  }
+  JsonObject obj = jsonIn.as<JsonObject>();
+  s_cvg.updateFromJson(obj);
+  s_app.config().write_config(s_cvg);
+  s_pid.gains_vg().updateFromJson(obj);
+  s_app.config().write_config(s_pid.gains_vg());
+  response->send(200, "text/plain", "ok");
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus apiPostEnable(NetRequest* request, NetResponse* response) {
+  s_temp_control.delaySetEnable(true);
+  response->send(200, "application/json", "{\"isOk\":true}");
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus apiPostDisable(NetRequest* request, NetResponse* response) {
+  s_temp_control.delaySetEnable(false);
+  response->send(200, "application/json", "{\"isOk\":true}");
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus apiPutTarget(NetRequest* request, NetResponse* response, JsonVariant& jsonIn) {
+  if (!jsonIn.is<JsonObject>()) {
+    response->send(500, "text/plain", "not a json object");
+    NET_REPLY(request, ESP_FAIL);
+  }
+  JsonObject obj = jsonIn.as<JsonObject>();
+  s_cmdvg.updateFromJson(obj);
+  s_app.config().write_config(s_cmdvg);
+  response->send(200, "application/json", "{\"isOk\":true}");
+  NET_REPLY(request, ESP_OK);
+}
+
+NetHandlerStatus apiPostTestCommand(NetRequest* request, NetResponse* response) {
+  s_temp_control.delaySetTestCommand();
+  response->send(200, "application/json", "{\"isOk\":true}");
+  NET_REPLY(request, ESP_OK);
+}
+
 }  // namespace og3
 
 void setup() {
   Wire1.setPins(og3::kSda2, og3::kScl2);  // The room temp sensor uses this second i2c bus.
-  og3::s_app.web_server_module().on("/", HTTP_GET, og3::handleWebRoot);
-  og3::s_app.web_server_module().on("/", HTTP_POST, og3::handleWebRoot);
-  og3::s_app.web_server_module().on(og3::s_config_url, HTTP_GET, og3::handleConfigure);
-  og3::s_app.web_server_module().on(og3::s_config_url, HTTP_POST, og3::handleConfigure);
+
+  initSvelteStaticFiles(&og3::s_app.web_server_module().native_server());
+  og3::s_app.web_server_module().on("/api/wifi", HTTP_GET, og3::apiGetWifi);
+  og3::s_app.web_server_module().on("/api/mqtt", HTTP_GET, og3::apiGetMqtt);
+  og3::s_app.web_server_module().on("/api/status", HTTP_GET, og3::apiGetStatus);
+  og3::s_app.web_server_module().on("/api/config", HTTP_GET, og3::apiGetConfig);
+
+  og3::s_app.web_server_module().onJson("/api/wifi", HTTP_PUT, og3::putWifiConfig);
+  og3::s_app.web_server_module().onJson("/api/mqtt", HTTP_PUT, og3::putMqttConfig);
+  og3::s_app.web_server_module().onJson("/api/config", HTTP_PUT, og3::putConfig);
+  og3::s_app.web_server_module().onJson("/api/target", HTTP_PUT, og3::apiPutTarget);
+
+  og3::s_app.web_server_module().on("/api/enable", HTTP_POST, og3::apiPostEnable);
+  og3::s_app.web_server_module().on("/api/disable", HTTP_POST, og3::apiPostDisable);
+  og3::s_app.web_server_module().on("/api/test_command", HTTP_POST, og3::apiPostTestCommand);
+
+  og3::s_app.web_server_module().on("/api/restart", HTTP_POST,
+                                    [](og3::NetRequest* request, og3::NetResponse* response) {
+                                      response->send(200, "text/plain", "restarting");
+                                      og3::s_app.tasks().runIn(1000, []() { ESP.restart(); });
+                                      NET_REPLY(request, ESP_OK);
+                                    });
+
+  og3::s_app.web_server_module().on("/old", HTTP_GET, og3::handleWebRoot);
+  og3::s_app.web_server_module().on("/old", HTTP_POST, og3::handleWebRoot);
+  og3::s_app.web_server_module().on("/old_config", HTTP_GET, og3::handleConfigure);
+  og3::s_app.web_server_module().on("/old_config", HTTP_POST, og3::handleConfigure);
 
   og3::s_oled.setup();
   og3::s_oled.addDisplayFn([]() {

@@ -1,0 +1,277 @@
+<script>
+  import { writable } from 'svelte/store';
+  import { onMount } from 'svelte';
+  import Navbar from './components/Navbar.svelte';
+  import Sidebar from './components/Sidebar.svelte';
+  import HomePage from './pages/HomePage.svelte';
+  import DoughConfigPage from './pages/DoughConfigPage.svelte';
+  import WiFiConfigPage from './pages/WiFiConfigPage.svelte';
+  import MQTTConfigPage from './pages/MQTTConfigPage.svelte';
+
+  // API base URL
+  const API_BASE = '/api';
+
+  let currentPage = 'home';
+  let loading = true;
+  let error = null;
+
+  export let config = writable({
+    temp_min_ok: 10,
+    temp_max_ok: 70,
+    ctl_ff_per_delta_c: 0.01,
+    ramp_rate: 0.05,
+    ff_per_rate: 0,
+    kP: 0.25,
+    kI: 0.001,
+    kD: 5.0,
+    iMax: 0.15,
+    iMin: -0.15
+  });
+
+  export let wifi = writable({
+    essId: '',
+    wifiPassword: '',
+    board: 'dough133'
+  });
+
+  export let mqtt = writable({
+    hostAddr: '',
+    port: 1883,
+    authUser: '',
+    authPassword: '',
+  });
+
+  export let systemStatus = writable({
+    state: 'Off',
+    state_idx: 0,
+    temp_enclosure: 0,
+    hum_enclosure: 0,
+    temp_room: 0,
+    hum_room: 0,
+    temp_filt: 0,
+    temp_d_filt: 0,
+    target: 0,
+    set_temp: 0,
+    heater: 0,
+    fan: false,
+    htr_mode: 'off',
+    fan_mode: 'off',
+    cmd_p: 0,
+    cmd_i: 0,
+    cmd_d: 0,
+    cmd_ff: 0,
+    mqttConnected: false,
+    software: '',
+    hardware: 'Dough133'
+  });
+
+  export let isOnline = writable(true);
+
+  // Load configuration from server
+  async function loadConfig() {
+    try {
+      const response = await fetch(`${API_BASE}/config`);
+      if (!response.ok) throw new Error('Failed to load configuration');
+      const data = await response.json();
+      config.set(data);
+      isOnline.set(true);
+    } catch (err) {
+      console.error('Error loading config:', err);
+      isOnline.set(false);
+    }
+  }
+
+  // Load WiFi config from server
+  async function loadWiFiConfig() {
+    try {
+      const response = await fetch(`${API_BASE}/wifi`);
+      if (!response.ok) throw new Error('Failed to load WiFi config');
+      const data = await response.json();
+      wifi.set(data);
+      isOnline.set(true);
+    } catch (err) {
+      console.error('Error loading WiFi config:', err);
+      isOnline.set(false);
+    }
+  }
+
+  // Load MQTT config from server
+  async function loadMQTTConfig() {
+    try {
+      const response = await fetch(`${API_BASE}/mqtt`);
+      if (!response.ok) throw new Error('Failed to load MQTT config');
+      const data = await response.json();
+      mqtt.set(data);
+      isOnline.set(true);
+    } catch (err) {
+      console.error('Error loading MQTT config:', err);
+      isOnline.set(false);
+    }
+  }
+
+  // Load system status
+  async function loadSystemStatus() {
+    try {
+      const response = await fetch(`${API_BASE}/status`);
+      if (!response.ok) throw new Error('Failed to load system status');
+      const data = await response.json();
+      systemStatus.set(data);
+      isOnline.set(true);
+    } catch (err) {
+      console.error('Error loading system status:', err);
+      isOnline.set(false);
+    }
+  }
+
+  // Initialize data on mount
+  onMount(async () => {
+    loading = true;
+    await Promise.all([
+      loadConfig(),
+      loadWiFiConfig(),
+      loadMQTTConfig(),
+      loadSystemStatus()
+    ]);
+    loading = false;
+
+    // Poll system status every 2 seconds
+    const updateInterval = setInterval(() => {
+      loadSystemStatus();
+    }, 2000);
+
+    return () => clearInterval(updateInterval);
+  });
+
+  function changePage(page) {
+    currentPage = page;
+  }
+</script>
+
+<div class="app-container">
+  <Navbar {wifi} {isOnline} />
+  {#if loading}
+    <div class="loading-container">
+      <div class="spinner"></div>
+      <p>Loading configuration...</p>
+    </div>
+  {:else if error}
+    <div class="error-container">
+      <p class="error-message">⚠️ {error}</p>
+      <p class="error-hint">Check device connection.</p>
+    </div>
+  {/if}
+  <div class="main-layout" class:hidden={loading}>
+    <Sidebar {currentPage} {systemStatus} on:changePage={(e) => changePage(e.detail)} />
+    <main class="content">
+      <div class="content-inner">
+        {#if currentPage === 'home'}
+          <HomePage {config} {wifi} {mqtt} {systemStatus} on:changePage={(e) => changePage(e.detail)} />
+        {:else if currentPage === 'config'}
+          <DoughConfigPage {config} />
+        {:else if currentPage === 'wifi'}
+          <WiFiConfigPage {wifi} />
+        {:else if currentPage === 'mqtt'}
+          <MQTTConfigPage {mqtt} {systemStatus} />
+        {/if}
+      </div>
+    </main>
+  </div>
+</div>
+
+<style>
+  :global(*) {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  :global(body) {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: #f3f4f6;
+    margin: 0;
+    padding: 0;
+  }
+
+  .app-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .main-layout {
+    display: flex;
+    flex: 1;
+  }
+
+  @media (max-width: 768px) {
+    .main-layout {
+      flex-direction: column;
+    }
+  }
+
+  .content {
+    flex: 1;
+    padding: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .content {
+      padding: 1rem;
+    }
+  }
+
+  .content-inner {
+    max-width: 1000px;
+  }
+
+  .loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    gap: 1rem;
+  }
+
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e5e7eb;
+    border-top-color: #059669;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .loading-container p {
+    color: #6b7280;
+    font-size: 1rem;
+  }
+
+  .error-container {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin: 2rem;
+    text-align: center;
+  }
+
+  .error-message {
+    color: #991b1b;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .error-hint {
+    color: #6b7280;
+    font-size: 0.875rem;
+  }
+
+  .hidden {
+    display: none;
+  }
+</style>
