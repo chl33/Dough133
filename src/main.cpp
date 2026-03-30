@@ -27,7 +27,7 @@
 
 #include "svelteesp32async.h"
 
-#define VERSION "0.9.97"
+#define VERSION "0.9.98"
 
 // TODO(chrishl):
 //  - Get board temperature working.
