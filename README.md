@@ -1,4 +1,4 @@
-# Dough133
+# Dough133 (v1.0.0)
 
 Dough133 is a temperature-controlled container for proofing and fermenting sourdough.
 It uses a small cooler and a PTC heater with a fan to heat the inside of the cooler.
@@ -54,7 +54,6 @@ The Cooler plug helps avoid heat leaking through the hole through which wires ru
 
 ![Cooler plug](images/cooler-plug-1400x858.webp)
 
-
 ## Software
 
 The software is based on the [og3](https://github.com/chl33/og3) library and built
@@ -62,15 +61,12 @@ The software is based on the [og3](https://github.com/chl33/og3) library and bui
 
 ### Features
 
-*   **PID Temperature Control:** Uses a Proportional-Integral-Derivative controller with
-      feedforward to maintain precise temperature.
-*   **Web Interface:** Configure target temperature, view status, and tune PID settings
-      via a web browser.
-*   **Home Assistant Integration:** Supports MQTT auto-discovery for seamless integration
-      with Home Assistant as a generic thermostat.
-*   **OLED Display:** Shows current status, temperature, and IP address.
-*   **Safety Features:** Includes max/min temperature limits, sensor error detection,
-      and safety hardware to cut heater power if the microprocessor is not running properly.
+*   **Modern Web Interface:** A responsive Svelte-based UI for real-time status monitoring, PID tuning, and system configuration.
+*   **PID Temperature Control:** Uses a Proportional-Integral-Derivative controller with feedforward to maintain precise temperature.
+*   **Manual Fan Control:** Toggle the enclosure fan manually via the web interface.
+*   **Home Assistant Integration:** Supports MQTT auto-discovery for seamless integration with Home Assistant as a generic thermostat.
+*   **Safety Features:** Includes max/min temperature limits, sensor error detection, and safety hardware to cut heater power if the microprocessor is not running properly.
+
 
 ### Getting Started
 

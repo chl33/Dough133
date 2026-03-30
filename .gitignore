@@ -11,3 +11,5 @@ secret*.ini
 venv
 /analysis/PWM_to_Watts/pwm_to_watts_plot.json
 /analysis/Cooling/cooling_analysis.json
+/local.ini
+/src/svelteesp32async.h
