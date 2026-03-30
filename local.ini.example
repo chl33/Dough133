@@ -1,0 +1,8 @@
+[platformio]
+default_envs = wifi
+
+[local]
+uploadPort = {ip-address-of-board}
+build_flags =
+;	'-D LOG_DEBUG'
+	'-D LOG_UDP'
