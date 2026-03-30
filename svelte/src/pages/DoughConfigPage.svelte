@@ -1,17 +1,21 @@
 <script>
-  import { Settings, Save, RefreshCcw, Play } from 'lucide-svelte';
+  import { onMount } from 'svelte';
+  import { Settings, Save, RefreshCcw, Play, RefreshCw } from 'lucide-svelte';
 
   export let config;
 
   $: conf = $config;
 
-  let localConfig = { ...conf };
+  let localConfig = {};
 
-  $: {
-    if (JSON.stringify(localConfig) !== JSON.stringify(conf)) {
-      localConfig = { ...conf };
-    }
+  // Initialize local copy when store data is available
+  function syncLocal() {
+    localConfig = { ...$config };
   }
+
+  onMount(() => {
+    syncLocal();
+  });
 
   async function saveConfig() {
     try {
@@ -32,8 +36,8 @@
     }
   }
 
-  async function resetConfig() {
-    localConfig = { ...conf };
+  function resetConfig() {
+    syncLocal();
   }
 
   async function runTestCommand() {
@@ -58,7 +62,7 @@
       <h1>Dough Control Configuration</h1>
     </div>
     <div class="actions">
-      <button class="btn btn-secondary" on:click={resetConfig}>
+      <button class="btn btn-secondary" on:click={resetConfig} title="Reset local changes">
         <RefreshCcw size={18} />
         Reset
       </button>
@@ -156,6 +160,18 @@
       </div>
     </section>
 
+    <!-- Output Clamping -->
+    <section class="card">
+      <h2>Output Clamping</h2>
+      <div class="form-group">
+        <label for="commandMin">Min PWM Command (0-1)</label>
+        <input id="commandMin" type="number" step="0.01" min="0" max="1" bind:value={localConfig.commandMin} />
+      </div>
+      <div class="form-group">
+        <label for="commandMax">Max PWM Command (0-1)</label>
+        <input id="commandMax" type="number" step="0.01" min="0" max="1" bind:value={localConfig.commandMax} />
+      </div>
+    </section>
   </div>
 </div>
 
