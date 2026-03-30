@@ -6,3 +6,4 @@ uploadPort = {ip-address-of-board}
 build_flags =
 ;	'-D LOG_DEBUG'
 	'-D LOG_UDP'
+wifi_upload_flags =
