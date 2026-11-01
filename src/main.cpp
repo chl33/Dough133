@@ -3,12 +3,16 @@
 
 #include <Arduino.h>
 #include <LittleFS.h>
+#ifndef NATIVE
+#include <esp_timer.h>
+#endif
 #include <og3/blink_led.h>
 #include <og3/constants.h>
 #include <og3/din.h>
 #include <og3/ha_app.h>
 #include <og3/html_table.h>
 #include <og3/kernel_filter.h>
+#include <og3/ntp.h>
 #include <og3/oled_display_ring.h>
 #include <og3/oled_wifi_info.h>
 #include <og3/pid.h>
@@ -18,8 +22,10 @@
 #include <og3/units.h>
 #include <og3/variable.h>
 #include <og3/web.h>
+#include <og3/wifi_watchdog.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -27,7 +33,7 @@
 
 #include "svelteesp32async.h"
 
-#define VERSION "1.0.0"
+#define VERSION "1.1.0"
 
 // TODO(chrishl):
 //  - Get board temperature working.
@@ -52,7 +58,12 @@ constexpr int kUpdateOnMsec = 1 * kMsecInSec;
 constexpr int kUpdateOffMsec = 10 * kMsecInSec;
 constexpr int kHeaterCooldownMsec = 90 * kMsecInSec;
 constexpr double kHeaterPwmFrequency = 100;  // Pwm::kAnalogWriteFreqMin;  // 100Hz.
-constexpr double kSafetyPwmFrequency = 200;
+// Hardware safety monostable (SN74LVC1G123, R=100k, C=100nF -> ~10ms timeout) requires
+// a falling edge on kSafetyPWMPin at least every <10ms. Toggle every 2.5ms (200Hz) from
+// a timer only while both loop() and heaterOn() heartbeats remain fresh.
+constexpr uint64_t kSafetyTogglePeriodUsec = 2500;
+constexpr uint32_t kSafetyLoopTimeoutMsec = 250;
+constexpr uint32_t kSafetyControlTimeoutMsec = 2500;
 // Time to turn on relay from web button press.
 constexpr int kFanOnMsec = 60 * kMsecInSec;
 
@@ -71,7 +82,6 @@ constexpr float kTargetTempMax = 35.0f;
 constexpr float kTargetTempMin = 15.0f;
 
 constexpr uint8_t kPwmChannel = 0;
-constexpr uint8_t kSafetyPwmChannel = 1;
 constexpr uint8_t kPwmResolution = 16;
 
 // Delay between updates of the OLED.
@@ -81,23 +91,11 @@ static const char kEnclosureTemperature[] = "enclosure_temp";
 static const char kRoomTemperature[] = "room_temp";
 static const char kFilteredTemperature[] = "filt_temp";
 static const char kFilteredDTemperature[] = "filt_d_temp";
-static const char kTargetTemperature[] = "target_temp";
 static const char kEnclosureHumidity[] = "enclosure_humidity";
 static const char kRoomHumidity[] = "room_humidity";
 static const char kHeater[] = "heater";
 static const char kFan[] = "fan";
-static const char kHeaterState[] = "heater_state";
-static const char kHeaterError[] = "heater_error";
-static const char kSafetyPWM[] = "safety_pwm";
-static const char kCommandP[] = "cmd_p";
-static const char kCommandD[] = "cmd_d";
-static const char kCommandI[] = "cmd_i";
-static const char kCommandFF[] = "cmd_ff";
-static const char kTestCommand[] = "cmd_test";
-static const char kTestCommandTime[] = "cmd_test_test";
 
-static const char kHtrMode[] = "htr_mode";
-static const char kFanMode[] = "fan_mode";
 static const char kOff[] = "off";
 static const char kHeat[] = "heat";
 static const char kHigh[] = "high";
@@ -108,33 +106,34 @@ constexpr App::LogType kLogType = App::LogType::kUdp;
 constexpr App::LogType kLogType = App::LogType::kSerial;  // kSerial
 #endif
 
-HAApp s_app(HAApp::Options(kManufacturer, kModel,
-                           WifiApp::Options()
-                               .withSoftwareName(kSoftware)
-                               .withDefaultDeviceName("doughl33")
+HAApp s_app(
+    HAApp::Options(kManufacturer, kModel,
+                   WifiApp::Options()
+                       .withSoftwareName(kSoftware)
+                       .withDefaultDeviceName("doughl33")
 #if defined(LOG_UDP) && defined(LOG_UDP_ADDRESS)
-                               .withUdpLogHost(IPAddress(LOG_UDP_ADDRESS))
-
+                       .withUdpLogHost(IPAddress(LOG_UDP_ADDRESS))
 #endif
-                               .withOta(OtaManager::Options(OTA_PASSWORD))
-                               .withApp(App::Options().withLogType(kLogType))));
+                       .withOta(OtaManager::Options(OTA_PASSWORD))
+                       .withApp(App::Options().withLogType(kLogType).withReserveTasks(32))));
 
 // Have oled display IP address or AP status.
 OledWifiInfo wifi_infof(&s_app.tasks());
 
-VariableGroup s_vg("dough");
+// NTP for time synchronization (needed for SSL/TLS and UDP log timestamps).
+Ntp s_ntp(&s_app.module_system(), Ntp::Options());
+
+// Reboot device if WiFi locks up.
+WifiWatchdog s_watchdog(&s_app, std::chrono::seconds(5), std::chrono::seconds(1));
+
+VariableGroup s_vg("dough", nullptr, 20);
 VariableGroup s_cvg("dough_cfg");
 VariableGroup s_cmdvg("dough_cmd");
 
 DIn s_button_reader("power_button", &s_app.module_system(), kButtonPin, "power button", s_vg);
 
-// void onConfigLoad();
-
 const float kCommandMax = 1.0f;
 const float kCommandMin = 0.0f;
-const float kIMax = kDefaultCtlIMax;
-const float kFeedforward = 0.0f;
-const float kIMin = kDefaultCtlIMin;
 
 PID s_pid(PID::Gains(kDefaultCtlP, kDefaultCtlI, kDefaultCtlD)
               .withCommandMax(kCommandMax)
@@ -153,21 +152,73 @@ Relay s_relay_fan(kFan, &s_app.tasks(), kRelayFanPin, "fan", true, s_vg);
 // PWM to regulate heater power
 Pwm s_pwm_heater(kHeater, kRelayHeaterPin, kPwmChannel, kPwmResolution, &s_app.module_system(),
                  kHeaterPwmFrequency);
-// PWM to enable the heater.  If this stops, the safety circuit will stop the heater signal.
-Pwm s_pwm_safety(kSafetyPWM, kSafetyPWMPin, kSafetyPwmChannel, kPwmResolution,
-                 &s_app.module_system(), kSafetyPwmFrequency);
 
 // Control of the power/mode LED.
 BlinkLed s_blink("power", kPowerLEDPin, &s_app, 500, false /*on-low*/);
 
+// Software-monitored pulse generator for hardware safety watchdog (U4 SN74LVC1G123 on GPIO19).
+// Rather than using hardware PWM (which would keep running if the CPU/loop hangs), an esp_timer
+// toggles kSafetyPWMPin only while both loop() and heaterOn() heartbeats remain recent.
+std::atomic<bool> s_safety_heater_enabled{false};
+std::atomic<uint32_t> s_last_loop_msec{0};
+std::atomic<uint32_t> s_last_control_msec{0};
+bool s_safety_pin_high = false;
+#ifndef NATIVE
+esp_timer_handle_t s_safety_timer = nullptr;
+
+void safetyTimerCallback(void* /*arg*/) {
+  const uint32_t now = millis();
+  const bool loop_ok =
+      (now - s_last_loop_msec.load(std::memory_order_relaxed)) < kSafetyLoopTimeoutMsec;
+  const bool ctl_ok =
+      (now - s_last_control_msec.load(std::memory_order_relaxed)) < kSafetyControlTimeoutMsec;
+  if (s_safety_heater_enabled.load(std::memory_order_relaxed) && loop_ok && ctl_ok) {
+    s_safety_pin_high = !s_safety_pin_high;
+    digitalWrite(kSafetyPWMPin, s_safety_pin_high ? HIGH : LOW);
+  } else if (s_safety_pin_high) {
+    s_safety_pin_high = false;
+    digitalWrite(kSafetyPWMPin, LOW);
+  }
+}
+#endif
+
+void initSafetyWatchdog() {
+  pinMode(kSafetyPWMPin, OUTPUT);
+  digitalWrite(kSafetyPWMPin, LOW);
+  const uint32_t now = millis();
+  s_last_loop_msec.store(now, std::memory_order_relaxed);
+  s_last_control_msec.store(now, std::memory_order_relaxed);
+#ifndef NATIVE
+  const esp_timer_create_args_t timer_args = {
+      .callback = &safetyTimerCallback,
+      .arg = nullptr,
+      .dispatch_method = ESP_TIMER_TASK,
+      .name = "safety_wdt",
+      .skip_unhandled_events = true,
+  };
+  if (esp_timer_create(&timer_args, &s_safety_timer) == ESP_OK) {
+    esp_timer_start_periodic(s_safety_timer, kSafetyTogglePeriodUsec);
+  }
+#endif
+}
+
+void feedSafetyLoop() { s_last_loop_msec.store(millis(), std::memory_order_relaxed); }
+
 void heaterOn(float duty) {
   s_pwm_heater.setDutyF(duty);  // Set the heater power level via PWM ratio.
-  s_pwm_safety.setDutyF(0.5);   // This PWM signal allows heater power to pass to the MOSFET.
+  if (duty > 0.0f) {
+    s_last_control_msec.store(millis(), std::memory_order_relaxed);
+    s_safety_heater_enabled.store(true, std::memory_order_relaxed);
+  } else {
+    s_safety_heater_enabled.store(false, std::memory_order_relaxed);
+    digitalWrite(kSafetyPWMPin, LOW);
+  }
 }
 
 void heaterOff() {
+  s_safety_heater_enabled.store(false, std::memory_order_relaxed);
   s_pwm_heater.setDutyF(0.0f);  // Turn off the heater power.
-  s_pwm_safety.setDutyF(0.0f);  // Disable the safety PWM signal.
+  digitalWrite(kSafetyPWMPin, LOW);
 }
 
 KernelFilter s_temp_filter(
@@ -367,7 +418,7 @@ class TempControl : public Module {
 
     if (!temp_ok) {
       s_app.log().logf("Temperature %.1f outside valid range %.1f-%.1f", temp,
-                       m_temp_min_ok.value(), m_temp_min_ok.value());
+                       m_temp_min_ok.value(), m_temp_max_ok.value());
       setState(kStateError, 10 * kMsecInSec);
     }
 
@@ -549,9 +600,11 @@ class TempControl : public Module {
     if (0 == strncmp(payload, kOff, len)) {
       m_fan_mode = kOff;
       turnFanOff();
+      s_app.mqttSend(s_vg);
     } else if (0 == strncmp(payload, kHigh, len)) {
       m_fan_mode = kHigh;
       turnFanOn();
+      s_app.mqttSend(s_vg);
     } else {
       s_app.log().logf("setMode('%s', (%d)'%s') unknown mode", topic, static_cast<int>(len),
                        payload);
@@ -568,6 +621,8 @@ class TempControl : public Module {
       s_app.log().logf("setTargetTemp('%s', %g) target too low", topic, temp);
     } else {
       setTargetTemp(temp);
+      s_app.config().write_config(s_cmdvg);
+      s_app.mqttSend(s_cmdvg, VariableBase::kConfig);
     }
   }
   bool haDiscovery(HADiscovery* had, JsonDocument* json) {
@@ -584,14 +639,14 @@ class TempControl : public Module {
     js["name"] = name;
     js["mode_cmd_t"] = "~/mode/set";
     js["mode_stat_t"] = "~/dough";
-    js["mode_stat_tpl"] = "{{value_json.htr_mode}}";  // Set state to "off", "heat";
+    js["mode_stat_tpl"] = "{{value_json.heatMode}}";  // Set state to "off", "heat";
     js["temp_cmd_t"] = "~/set_temp/set";
     js["temp_stat_t"] = "~/dough_cmd";
-    js["temp_stat_tpl"] = "{{value_json.set_temp}}";
+    js["temp_stat_tpl"] = "{{value_json.setTemp}}";
     js["temperature_unit"] = "C";
     js["fan_mode_cmd_t"] = "~/fan_mode/set";
     js["fan_mode_stat_t"] = "~/dough";
-    js["fan_mode_stat_tpl"] = "{{value_json.fan_mode}}";  // Set state to "off", "high";
+    js["fan_mode_stat_tpl"] = "{{value_json.fanMode}}";  // Set state to "off", "high";
     js["curr_temp_t"] = "~/dough";
     js["curr_temp_tpl"] = "{{value_json.filt_temp}}";
     js["min_temp"] = kTargetTempMin;
@@ -803,6 +858,7 @@ NetHandlerStatus putWifiConfig(NetRequest* request, NetResponse* response, JsonV
   s_app.wifi_manager().variables().updateFromJson(obj);
   s_app.config().write_config(s_app.wifi_manager().variables());
   response->send(200, "text/plain", "ok");
+  s_app.tasks().runIn(1000, []() { ESP.restart(); });
   NET_REPLY(request, ESP_OK);
 }
 
@@ -959,12 +1015,14 @@ void setup() {
   og3::s_app.config().read_config(og3::s_cvg);
   og3::s_app.config().read_config(og3::s_cmdvg);
   og3::s_button_reader.read();  // read state of the button on startup.
+  og3::initSafetyWatchdog();
   og3::heaterOff();
   // This should start the system reporting state: temperature, etc...
   og3::s_temp_control.update();
 }
 
 void loop() {
+  og3::feedSafetyLoop();
   og3::s_app.loop();
 
   // Detect button-down transition.

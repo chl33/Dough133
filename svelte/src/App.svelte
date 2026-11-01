@@ -45,7 +45,10 @@
     port: 1883,
     authUser: '',
     authPassword: '',
-    enabled: true
+    enabled: true,
+    mode: 'home-assistant',
+    ssl: false,
+    sslVerify: true
   });
 
   export let systemStatus = writable({
