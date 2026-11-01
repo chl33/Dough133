@@ -3,13 +3,11 @@
 
 """GUI for interactive control of OpenSCAD test renders."""
 
-from pathlib import Path
 import os
 import re
 import subprocess
 import threading
-
-# ruff: noqa: E402
+from pathlib import Path
 
 import gi
 
