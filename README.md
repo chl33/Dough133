@@ -1,4 +1,4 @@
-# Dough133 (v1.0.0)
+# Dough133 (v1.1.0)
 
 Dough133 is a temperature-controlled container for proofing and fermenting sourdough.
 It uses a small cooler and a PTC heater with a fan to heat the inside of the cooler.
@@ -64,8 +64,8 @@ The software is based on the [og3](https://github.com/chl33/og3) library and bui
 *   **Modern Web Interface:** A responsive Svelte-based UI for real-time status monitoring, PID tuning, and system configuration.
 *   **PID Temperature Control:** Uses a Proportional-Integral-Derivative controller with feedforward to maintain precise temperature.
 *   **Manual Fan Control:** Toggle the enclosure fan manually via the web interface.
-*   **Home Assistant Integration:** Supports MQTT auto-discovery for seamless integration with Home Assistant as a generic thermostat.
-*   **Safety Features:** Includes max/min temperature limits, sensor error detection, and safety hardware to cut heater power if the microprocessor is not running properly.
+*   **Home Assistant & Adafruit IO Integration:** Supports MQTT auto-discovery for seamless integration with Home Assistant as a generic thermostat, as well as SSL/TLS and Adafruit IO broker modes.
+*   **Safety Features:** Includes max/min temperature limits, sensor error detection, `WifiWatchdog` recovery, and a software-monitored `200 Hz` heartbeat pulse for the hardware safety circuit (`SN74LVC1G123`) to cut heater power if the main loop or control loop stalls.
 
 
 ### Getting Started
@@ -73,36 +73,43 @@ The software is based on the [og3](https://github.com/chl33/og3) library and bui
 #### Prerequisites
 
 *   [PlatformIO](https://platformio.org/install) (CLI or VSCode extension).
+*   [Node.js](https://nodejs.org/) (v22+) and `npm` for building the Svelte web interface.
 
 #### Configuration
 
-The project uses `ini` files for local configuration and secrets. You need to create `secrets.ini` and `secrets-usb.ini` based on the provided examples.
+The project uses `ini` files for local configuration and secrets. Create `secrets.ini` and `local.ini` based on the provided examples:
 
-1.  **General Secrets:**
+1.  **Secrets (`secrets.ini`):**
     Copy `secrets.ini.example` to `secrets.ini` and configure:
     ```ini
     [secrets]
-    udpLogTarget = 192, 168, 1, 100  ; Optional: IP for UDP logging
     otaPassword = my_secure_password ; Password for Over-The-Air updates
     ```
 
-2.  **Upload Configuration:**
-    For USB flashing, copy `secrets-usb.ini.example` to `secrets-usb.ini`:
+2.  **Local Build & Upload Settings (`local.ini`):**
+    Copy `local.ini.example` to `local.ini`:
     ```ini
-    [secrets]
-    uploadProtocol = esptool
-    uploadPort = /dev/ttyUSB0      ; Check your specific port (e.g., COM3 on Windows)
-    uploadAuth =
-    uploadHostPort =
+    [platformio]
+    default_envs = wifi              ; Use 'usb' for serial flashing or 'wifi' for OTA
+
+    [local]
+    uploadPort = 192.168.1.100       ; IP address of the board for OTA uploads
+    build_flags =
+        '-D LOG_UDP'
+        '-D LOG_UDP_ADDRESS=192, 168, 1, 50'
+    wifi_upload_flags =
     ```
-    *(For OTA updates later, you can use `secrets-ota.ini`)*
 
 #### Building and Flashing
 
-1.  Connect the ESP32 board to your computer via USB.
-2.  Build and upload the firmware:
+1.  Install Svelte frontend dependencies (first time):
     ```bash
-    pio run -t upload
+    cd svelte && npm ci && cd ..
+    ```
+2.  Build and upload the firmware (via USB or OTA depending on `default_envs` or `-e`):
+    ```bash
+    pio run -e usb -t upload   # Flash via USB (/dev/ttyUSB0)
+    pio run -e wifi -t upload  # Flash via OTA
     ```
 3.  Monitor the serial output to verify startup:
     ```bash
